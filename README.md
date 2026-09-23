@@ -213,3 +213,12 @@ Auto-deploy on push to `main`; the whole service is described in `render.yaml`. 
 command and how to attach Neon: **[DEPLOYMENT.md](DEPLOYMENT.md)**. If you care about the memory limit —
 and on the free plan you do — read **[docs/MEMORY.md](docs/MEMORY.md)**: it has the measured peak of every
 configuration and the exact OOM event this repo had.
+
+
+## Real neural image-to-3D engine
+
+Image builds can use the local TripoSR neural reconstructor instead of the CPU silhouette/primitive fallback. The learned model infers a full 3D surface from the reference image and Character Forge exports the resulting mesh as GLB.
+
+The optional backend is in \`neural3d.py\`. Install \`requirements-neural3d.txt\` on a machine with enough RAM/VRAM and set \`FORGE_3D_ENGINE=triposr\`. The pretrained checkpoint is cached locally from Hugging Face rather than committed into Git history.
+
+TripoSR is an open-source MIT-licensed model; its official implementation documents roughly 6 GB VRAM for a single-image run. The existing free Render configuration is only 512 MB, so it remains the lightweight fallback rather than pretending it can run the neural model.
