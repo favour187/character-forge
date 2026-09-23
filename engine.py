@@ -1707,6 +1707,66 @@ def run_pipeline(source="text", text=None, image_bytes=None, budget="game",
                 p[slot] = rgb
     done("Understand input (" + ai_info["plan_source"] + ")")
 
+    # ------------------------------------------------------------------
+    # Real neural reconstruction route
+    # ------------------------------------------------------------------
+    # The AI director above decides what the character is, but it must not
+    # fabricate a mesh from boxes/capsules. When a Hunyuan3D API is configured,
+    # image input goes directly through a genuine image -> mesh model.
+    if source == "image":
+        try:
+            import providers.hunyuan3d as neural3d
+            if neural3d.configured():
+                neural = neural3d.generate(
+                    image_bytes,
+                    model_dir,
+                    target_tris=target,
+                    texture=True,
+                )
+                done("Neural 3D reconstruction (Hunyuan3D)")
+                done("Real GLB received from 3D model")
+
+                if not str(plan.get("brief") or "").strip():
+                    plan["brief"] = "Neural 3D reconstruction from the supplied character image"
+                public_plan = {k: v for k, v in plan.items() if not k.startswith("_")}
+                report = {
+                    "stages": stages,
+                    "source": source,
+                    "prompt": prompt,
+                    "style": p["style"],
+                    "tags": p.get("tags", []),
+                    "notes": params.get("source_notes", []) + [
+                        "Image was reconstructed by a neural 3D model instead of the legacy primitive modeller.",
+                        "Hidden surfaces are inferred by the 3D model; a single image cannot guarantee unseen-side fidelity.",
+                    ],
+                    "palette": {k: swatch(p[k]) for k in PLAN_SLOTS},
+                    "accessories": sorted(p["accessories"]),
+                    "geometry": {
+                        "vertices": neural["vertices"],
+                        "triangles": neural["triangles"],
+                        "triangles_before_optimize": neural["triangles"],
+                        "target_tris": int(target),
+                        "decimated": False,
+                        "materials": max(1, neural["volumes"]),
+                        "texture_size": int(tex_size or plan.get("texture_size") or 1024),
+                        "maps": ["baseColor"] if neural.get("textured") else [],
+                        "volumes": neural["volumes"],
+                    },
+                    "height_m": round(float(p["height"]), 2),
+                    "heads_tall": round(float(p.get("heads") or STYLE_PROPS[p["style"]]["heads"]), 2),
+                    "plan": public_plan,
+                    "ai": ai_info,
+                    "pipeline": "neural-3d",
+                    "neural_provider": neural["provider"],
+                    "neural_settings": neural["settings"],
+                }
+                return report
+        except Exception as e:
+            # Keep the service usable if the optional GPU provider is offline.
+            # The report makes the fallback explicit instead of pretending the
+            # primitive result came from a neural 3D model.
+            ai_info["neural_3d_error"] = str(e)[:500]
+
     # geometry budget: the plan decides unless the user capped it
     b = dict(BUDGETS["game" if budget in (None, "auto") else budget])
     det = plan.get("detail") or {}
