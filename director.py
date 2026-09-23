@@ -66,7 +66,7 @@ RULES = """RULES
 - "features" may only use: """ + ", ".join(FEATURES) + """.
 - Never duplicate: if something is in "features" (cape, staff, sword, shield, wings, hat, backpack, tail, horns) do NOT also build it as an extra part.
 - "extra_parts" are extra primitives for things the parametric body does not cover (wings, tails, floating objects, weapons, mech parts). Positions are in metres: x = left/right, y = height above the feet, z = depth (positive = front, negative = back). size = [width, height, depth] in metres, max 6 parts.
-- For an input image, study silhouette, proportions, depth cues, materials, clothing and accessories, then describe in "back_view" how you reconstruct what the camera cannot see (mirroring, symmetry, standard garment construction).
+- For an input image, study silhouette, proportions, depth cues, materials, clothing and accessories, then describe in "back_view" how you reconstruct what the camera cannot see (mirroring, symmetry, standard garment construction). Set "texture_size": 2048 for image input — the concept art is sampled straight onto the character's surfaces.
 - Reply with ONE JSON object and nothing else."""
 
 

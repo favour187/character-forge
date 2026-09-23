@@ -317,11 +317,30 @@ def analyze_image(png_bytes):
         mask = alpha > 60
         seg_note = "Subject isolated from PNG alpha channel"
     else:
-        border = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
-        bg = np.median(border, axis=0)
-        fg_guess = np.linalg.norm(rgb - bg, axis=2) > 30
+        # Per-row background LUT from the right margin + per-column LUT from the
+        # bottom margin.  Handles gradient skies / rocky grounds, unlike a single
+        # median border colour (which a bright sky + dark character would defeat).
+        h, w, _ = rgb.shape
+        row_bg = np.median(rgb[:, int(w * 0.93):, :], axis=1)        # (h, 3)
+        col_bg = np.median(rgb[int(h * 0.93):, :, :], axis=0)        # (w, 3)
+        dr = np.abs(rgb - row_bg[:, None, :]).max(axis=2)
+        dc = np.abs(rgb - col_bg[None, :, :]).max(axis=2)
+        fg_guess = (dr > 30) & (dc > 30)
         mask = ~_background_mask(fg_guess)
-        seg_note = "Subject isolated by border-colour flood segmentation"
+        # clean the mask: opening strips thin junk (HUD text, cable lines) that
+        # the flood picks up, then keep the largest blob and shrink it slightly
+        # so band crops stay inside the subject
+        try:
+            from scipy import ndimage
+            mask = ndimage.binary_opening(mask, iterations=4)
+            lab, ncomp = ndimage.label(mask)
+            if ncomp > 1:
+                sizes = ndimage.sum(np.ones_like(lab), lab, range(1, ncomp + 1))
+                mask = lab == (int(np.argmax(sizes)) + 1)
+            mask = ndimage.binary_erosion(mask, iterations=1)
+        except Exception:                                          # noqa: BLE001
+            pass
+        seg_note = "Subject isolated by margin-LUT segmentation + flood"
 
     ys, xs = np.where(mask)
     if len(ys) < 200:
@@ -409,6 +428,14 @@ def analyze_image(png_bytes):
         p["tags"].append("metallic surfaces detected")
 
     p["palette_read"] = {"top": top, "mid": mid, "low": low, "skin": skin, "hair": hair}
+    # keep the subject region for atlas painting (the character wears the art)
+    p["_img"] = {
+        "img": img,
+        "box": (int(x0), int(y0), int(x1) + 1, int(y1) + 1),
+        "head_frac": float(head_frac),
+        "torso_frac": float(torso_end),
+        "mask": mask,
+    }
     p["source_notes"].append("Back / occluded geometry inferred by symmetry + semantic defaults")
     return p
 
@@ -504,6 +531,24 @@ def build_character(p, budget):
         e.apply_translation([s * head_r * 0.34, head_c - head_r * 0.05, head_r * 0.83])
         add(e, TILE["eye"])
 
+    # face: a small nose + brows give the head real features instead of a blank orb
+    nose = S(subdivisions=max(1, sub - 1), radius=head_r * 0.10)
+    nose.apply_transform(np.diag([0.75, 1.0, 1.15, 1.0]))
+    nose.apply_translation([0, head_c - head_r * 0.15, head_r * 0.92])
+    add(nose, TILE["skin"])
+    for s in (-1, 1):
+        brow = BOX(extents=[head_r * 0.34, head_r * 0.05, head_r * 0.07])
+        brow.apply_transform(_rot(-s * 10, [0, 0, 1]))
+        brow.apply_translation([s * head_r * 0.32, head_c + head_r * 0.21, head_r * 0.84])
+        add(brow, TILE["hair"])
+
+    # anime side-locks framing the face
+    for s in (-1, 1):
+        lock = cap_y(head_r * 0.72, head_r * 0.15, count=(3, 8))
+        lock.apply_transform(_rot(s * 7, [0, 0, 1]))
+        lock.apply_translation([s * head_r * 0.97, head_c - head_r * 0.52, head_r * 0.36])
+        add(lock, TILE["hair"])
+
     # ---- neck / torso / hips ------------------------------------------------
     neck = cyl_y(head_r * 0.32, head_r * 0.6, sections=sec)
     neck.apply_translation([0, neck_y + head_r * 0.1, 0])
@@ -519,12 +564,21 @@ def build_character(p, budget):
     belt.apply_translation([0, hip_y * 1.01, 0])
     add(belt, TILE["leather"])
 
+    # pelvis blends the torso into the legs (kills the cylinder/capsule seam)
+    pelvis = S(subdivisions=max(1, sub - 1), radius=torso_r * 0.95)
+    pelvis.apply_transform(np.diag([1.3 * build, 0.62, 0.88, 1.0]))
+    pelvis.apply_translation([0, hip_y * 0.97, 0])
+    add(pelvis, TILE["pants"])
+
     # ---- arms (A-pose, ~24 degrees from the body) ----------------------------
     arm_len = torso_len * 1.05 * sp["arm_len"]
     arm_r = torso_r * sp.get("arm_r", 0.36)
     ang = 24.0
     for s in (-1, 1):
         shoulder = np.array([s * sh_x * 1.1, neck_y - head_r * 0.25, 0.0])
+        sh_blend = S(subdivisions=max(1, sub - 1), radius=arm_r * 1.35)
+        sh_blend.apply_translation(shoulder)
+        add(sh_blend, TILE["garment_a"])        # blends arm into torso
         arm = cap_y(arm_len, arm_r, count=cnt)
         arm.apply_translation(shoulder - [0, arm_len / 2, 0])
         arm.apply_transform(_rot(s * ang, [0, 0, 1], point=shoulder))
@@ -546,6 +600,9 @@ def build_character(p, budget):
         boot.apply_transform(np.diag([1.0, 1.0, 1.2, 1.0]))
         boot.apply_translation([x, hip_y * 0.10, leg_r * 0.10])
         add(boot, TILE["boots"])
+        ankle = S(subdivisions=max(1, sub - 1), radius=leg_r * 1.18)
+        ankle.apply_translation([x, hip_y * 0.30, leg_r * 0.05])
+        add(ankle, TILE["boots"])               # smooths the leg-to-boot step
         foot = BOX(extents=[leg_r * 2.05, leg_r * 1.05, leg_r * 3.4])
         foot.apply_translation([x, leg_r * 0.55, leg_r * 0.85])
         add(foot, TILE["boots"])
@@ -815,14 +872,186 @@ def _tile_detail(kind, rng, n):
     return h, np.clip(rough, 0.05, 1.0)
 
 
+def _skin_score(col_med):
+    """Per-column 0..1 face likelihood from the column median colours.
+    Rewards skin tone, penalises hair (too dark) and sky (too bright)."""
+    w = np.zeros(col_med.shape[0])
+    for i, c in enumerate(col_med):
+        r, g, b = float(c[0]), float(c[1]), float(c[2])
+        if r >= 60 and r >= g >= b and 15 < (r - b) < 140:
+            w[i] = 1.0
+    lum = col_med.mean(axis=1)
+    w *= np.clip((lum - 95) / 55, 0, 1)          # hair columns are darker than this
+    w *= 1.0 - np.clip((lum - 205) / 45, 0, 1)   # sky columns are brighter than this
+    k = max(3, w.size // 12)
+    sm = np.convolve(w, np.ones(k) / k, mode="same")
+    centred = np.exp(-(((np.arange(w.size) - w.size / 2) / w.size) ** 2) * 1.5)
+    return sm * (0.55 + 0.45 * centred)
+
+
+def _paint_image_tiles(color, info, n):
+    """Sample the concept art onto the per-part tiles, so the built character
+    wears the reference design.  Returns True when every key tile was painted.
+
+    Box-projection UVs (see _part_uv) map the tile's *columns* to the part's
+    longest axis and its *rows* to the second longest — for the head that is
+    char-Y / char-X, for the torso and legs char-Y / char-X as well.  So
+    vertical body bands are transposed before pasting; the face is located by
+    skin colour inside its band (the character may be off-centre / turned) and
+    pasted into the head's face rectangle, which is the skin the hair shell
+    does not cover."""
+    try:
+        img = info["img"].convert("RGB")
+        box = info["box"]
+        hf, te = float(info["head_frac"]), float(info["torso_frac"])
+        x0, y0, x1, y1 = box
+        W, H = x1 - x0, y1 - y0
+        if W < 60 or H < 120:
+            return False
+        mask = info.get("mask")
+
+        def band(f0, f1, wfrac=1.0, min_h=16):
+            """(image, mask) of a horizontal band; non-subject pixels are
+            forward-filled with their column's subject median."""
+            a = y0 + int(H * f0)
+            b = max(a + min_h, y0 + int(H * f1))
+            cw = max(16, int(W * wfrac))
+            cx = x0 + (W - cw) // 2
+            crop = img.crop((cx, a, cx + cw, b))
+            arr = np.array(crop, dtype=np.float32)
+            mb = None
+            if mask is not None:
+                mb = np.asarray(mask)[a:b, cx:cx + cw]
+                if mb.shape != arr.shape[:2]:
+                    mb = np.array(Image.fromarray(mb.astype(np.uint8) * 255)
+                                  .resize((arr.shape[1], arr.shape[0]), Image.NEAREST)) > 127
+                if mb.any():
+                    fallback = np.median(arr[mb], axis=0)
+                    for xi in range(arr.shape[1]):
+                        if not mb[:, xi].any():
+                            arr[:, xi] = fallback
+                        elif not mb[:, xi].all():
+                            arr[~mb[:, xi], xi] = np.median(arr[mb[:, xi], xi], axis=0)
+            return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8)), (mb is not None)
+
+        def tile_xy(i):
+            tx, ty = i % ATLAS_COLS, i // ATLAS_COLS
+            return (ATLAS_ROWS - 1 - ty) * n, tx * n
+
+        def put_full(tile, crop, transpose=True):
+            y, x = tile_xy(tile)
+            arr = np.array(crop, dtype=np.float32)
+            if transpose:
+                arr = arr.transpose(1, 0, 2)     # tile cols = char-Y = band rows
+            c = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
+            c = c.resize((n, n), Image.BICUBIC)
+            color[y:y + n, x:x + n] = np.array(c, dtype=np.float32)
+
+        # face: localise the 2-D skin blob in the head region (works for
+        # off-centre / turned characters), stand it upright and paste it over
+        # the head's face rectangle
+        face_img = None
+        try:
+            from scipy import ndimage
+            head_h = max(24, int(H * (hf + 0.05)))
+            head_crop = img.crop((x0, y0, x1, min(y1, y0 + head_h)))
+            hc = np.array(head_crop, dtype=np.float32)
+            r, g, b = hc[..., 0], hc[..., 1], hc[..., 2]
+            # warm saturated skin (tan rock reads greyer / less red than face skin)
+            skin = (((r >= 90) & (r < 245) & (r >= g) & (g >= b) &
+                     (r - b > 35) & (r - b < 150))).astype(np.float32)
+            if mask is not None:
+                m_h = np.asarray(mask)[y0:min(y1, y0 + head_h), x0:x1]
+                if m_h.shape == skin.shape:
+                    skin *= m_h
+            skin = ndimage.gaussian_filter(skin, 4)
+            h_h, w_h = skin.shape
+            skin *= np.exp(-(((np.arange(w_h) - w_h / 2) / w_h) ** 2) * 0.8)[None, :]
+            blob = skin > 0.5
+            picked = None
+            if blob.sum() > 60:
+                lab, nc = ndimage.label(blob)
+                cents = ndimage.center_of_mass(blob, lab, range(1, nc + 1))
+                sizes = ndimage.sum(blob, lab, range(1, nc + 1))
+                # the face sits in the lower two thirds of the head crop — crown
+                # blobs (bright hair highlights, rock) are rejected outright
+                cands = [i for i in range(nc) if cents[i][0] > h_h * 0.42]
+                if cands:
+                    picked = max(cands, key=lambda i: sizes[i])
+                elif max(c[0] for c in cents) > h_h * 0.30:   # nothing lower; take the best
+                    picked = max(range(nc), key=lambda i: sizes[i])
+            if picked is not None:
+                blob = lab == (picked + 1)
+                ys2, xs2 = np.where(blob)
+                fh, fw = ys2.max() - ys2.min() + 1, xs2.max() - xs2.min() + 1
+                # face-likeness gate: face skin is uniform and compact; background
+                # that leaks in through the hair (cliff, sky) is speckled/varied
+                px = hc[ys2, xs2]
+                var = float(np.linalg.norm(px - px.mean(axis=0), axis=1).mean())
+                fill = float(sizes[picked]) / (fh * fw + 1e-9)
+                edge = (xs2.max() >= w_h - 3) or (ys2.min() < 3)
+                if fh >= 16 and fw >= 16 and var < 58 and fill > 0.22 and not edge:
+                    # grow a little for the eye line, but never into the crown
+                    # zone (the hair shell covers the top of the head on the model)
+                    gy0 = max(int(h_h * 0.30), int(ys2.min() - min(fh * 0.25, 20)))
+                    gy1 = min(head_crop.size[1], int(ys2.max() + 1 + fh * 0.20))
+                    gx0 = max(0, int(xs2.min() - fw * 0.12))
+                    gx1 = min(head_crop.size[0], int(xs2.max() + 1 + fw * 0.15))
+                    face_img = head_crop.crop((gx0, gy0, gx1, gy1))
+        except Exception:                                                  # noqa: BLE001
+            face_img = None
+        if face_img is not None:      # messy head region -> keep procedural skin
+            face = np.flipud(np.array(face_img, dtype=np.float32)).transpose(1, 0, 2)
+            face = Image.fromarray(np.clip(face, 0, 255).astype(np.uint8))
+            ry, rx = int(0.225 * n), int(0.15 * n)
+            face = face.resize((int(0.61 * n), int(0.55 * n)), Image.BICUBIC)
+            y, x = tile_xy(TILE["skin"])
+            fy0, fx0 = y + ry, x + rx
+            color[fy0:fy0 + face.size[1], fx0:fx0 + face.size[0]] = np.array(face, np.float32)
+            info["_face_pasted"] = True
+
+        put_full(TILE["hair"], band(0.0, hf * 0.6, wfrac=1.0)[0], transpose=False)
+        put_full(TILE["garment_a"], band(hf, te * 0.85, wfrac=0.72)[0])
+        put_full(TILE["garment_b"], band(te * 0.6, 0.92, wfrac=0.72)[0])
+        put_full(TILE["pants"], band(te, 0.87, wfrac=0.6)[0])
+        put_full(TILE["boots"], band(0.84, 1.0, wfrac=0.5)[0])
+        return True
+    except Exception:                                          # noqa: BLE001
+        return False
+
+
+def _blush(color, n, strength):
+    """Soft cheek blush on the skin tile (text builds only — image builds get
+    the face straight from the art).  Head uv: image col = char-Y, row = char-X."""
+    i = TILE["skin"]
+    tx, ty = i % ATLAS_COLS, i // ATLAS_COLS
+    y0, x0 = (ATLAS_ROWS - 1 - ty) * n, tx * n
+    tint = np.array([255, 132, 132], float)
+
+    def soft(cx, cy, rx, ry, amt):
+        ys, xs = np.ogrid[y0:y0 + n, x0:x0 + n]
+        d = ((ys - cy) / ry) ** 2 + ((xs - cx) / rx) ** 2
+        w = np.clip(1 - d, 0, None) ** 2 * amt
+        region = color[y0:y0 + n, x0:x0 + n]
+        color[y0:y0 + n, x0:x0 + n] = region + (tint - region) * w[:, :, None]
+
+    soft(x0 + 0.42 * n, y0 + 0.725 * n, 0.11 * n, 0.10 * n, strength)
+    soft(x0 + 0.42 * n, y0 + 0.275 * n, 0.11 * n, 0.10 * n, strength)
+
+
 def paint_atlas(p, size=1024):
-    """Base color + metallic-roughness + normal atlases."""
+    """Base color + metallic-roughness + normal atlases.
+
+    With image input (p["_img"]) the per-part tiles are sampled from the
+    concept art itself; text-only builds get procedural per-material detail."""
     n = size // ATLAS_COLS
     rng = np.random.default_rng(42)
 
-    color = np.zeros((n * ATLAS_ROWS, n * ATLAS_COLS, 3), dtype=np.float64)
+    # float32 throughout: a 2048**2 float64 atlas plus its normal-map temporaries
+    # would OOM the free Render instance (~512 MB)
+    color = np.zeros((n * ATLAS_ROWS, n * ATLAS_COLS, 3), dtype=np.float32)
     mr = np.zeros((n * ATLAS_ROWS, n * ATLAS_COLS, 3), dtype=np.uint8)
-    height = np.zeros((n * ATLAS_ROWS, n * ATLAS_COLS), dtype=np.float64)
+    height = np.zeros((n * ATLAS_ROWS, n * ATLAS_COLS), dtype=np.float32)
     mr[:, :, 0] = 255  # occlusion slot (unused) -> white
 
     palette = {
@@ -837,22 +1066,36 @@ def paint_atlas(p, size=1024):
         tx, ty = i % ATLAS_COLS, i // ATLAS_COLS
         y0, x0 = (ATLAS_ROWS - 1 - ty) * n, tx * n   # v=0 is the bottom row of the image
         h, rough = _tile_detail(name, rng, n)
-        base = np.array(palette[name], dtype=np.float64)
+        base = np.array(palette[name], dtype=np.float32)
         shade = 1.0 + h * 0.06
         color[y0:y0 + n, x0:x0 + n] = base[None, None, :] * shade[:, :, None]
         mr[y0:y0 + n, x0:x0 + n, 1] = (rough * 255).astype(np.uint8)
         mr[y0:y0 + n, x0:x0 + n, 2] = int(metallic.get(name, 0.04) * 255)
         height[y0:y0 + n, x0:x0 + n] = h
 
-    color = np.clip(color, 0, 255).astype(np.uint8)
-    color_img = Image.fromarray(color, "RGB").filter(ImageFilter.GaussianBlur(0.6))
+    if p.get("_img") and _paint_image_tiles(color, p["_img"], n):
+        p["_img_used"] = True
+    elif p.get("style") in ("chibi", "stylized"):
+        _blush(color, n, 0.40 if p.get("style") == "chibi" else 0.22)
 
-    # normal map from height (Sobel)
+    color_img = Image.fromarray(np.clip(color, 0, 255).astype(np.uint8), "RGB") \
+        .filter(ImageFilter.GaussianBlur(0.6))
+
+    # normal map from a *smoothed* height field — raw Sobel of the grainy detail
+    # read as noisy skin on curved parts; low-frequency undulation looks far cleaner
+    try:
+        from scipy import ndimage
+        height = ndimage.gaussian_filter(height, sigma=max(1.0, n / 48.0))
+    except Exception:                                          # noqa: BLE001
+        pass
     dy, dx = np.gradient(height)
-    strength = 2.2
-    nrm = np.stack([-dx * strength, -dy * strength, np.ones_like(height)], axis=-1)
-    nrm /= np.linalg.norm(nrm, axis=-1, keepdims=True)
-    nrm_img = Image.fromarray(((nrm * 0.5 + 0.5) * 255).astype(np.uint8), "RGB")
+    strength = 1.5
+    nrm = np.empty_like(color, dtype=np.uint8)                # no float stack: OOM-safe
+    inv = 1.0 / np.sqrt((dx * strength) ** 2 + (dy * strength) ** 2 + 1.0)
+    nrm[..., 0] = ((-dx * strength * inv) * 0.5 + 0.5) * 255
+    nrm[..., 1] = ((-dy * strength * inv) * 0.5 + 0.5) * 255
+    nrm[..., 2] = (inv * 0.5 + 0.5) * 255
+    nrm_img = Image.fromarray(nrm, "RGB")
 
     mr_img = Image.fromarray(mr, "RGB")
     return color_img, mr_img, nrm_img
@@ -1105,7 +1348,7 @@ def detail_for_target(tris):
     if tris <= 2500:
         return {"sphere_sub": 2, "cyl_sec": 8, "cap_cnt": 6}
     if tris <= 12000:
-        return {"sphere_sub": 3, "cyl_sec": 14, "cap_cnt": 12}
+        return {"sphere_sub": 4, "cyl_sec": 16, "cap_cnt": 16}
     return {"sphere_sub": 4, "cyl_sec": 24, "cap_cnt": 20}
 
 
@@ -1115,7 +1358,7 @@ def local_plan(params, text, budget_hint=None):
     heads = float(params.get("heads") or sp["heads"])
     tris = int(budget_hint or BUDGETS["game"]["tris"])
     if params["style"] == "chibi":
-        tris = min(tris, 3500)
+        tris = min(tris, 5000)
     detail = detail_for_target(tris)
     return {
         "brief": (text or "concept image").strip()[:200],
@@ -1298,7 +1541,12 @@ def run_pipeline(source="text", text=None, image_bytes=None, budget="game",
     mesh, uv = assemble(parts)
     done(f"Optimise topology -> {len(mesh.faces):,} tris")
 
-    tex = int(tex_size or plan.get("texture_size") or 1024)
+    if tex_size:
+        tex = int(tex_size)
+    elif source == "image":
+        tex = 2048                                   # concept art deserves the full atlas
+    else:
+        tex = int(plan.get("texture_size") or 1024)
     tex = 1024 if tex not in (512, 1024, 2048) else tex
     color_img = finalize(mesh, uv, p, model_dir, tex_size=tex)
     done("Unwrap UVs + bake textures")

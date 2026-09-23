@@ -27,9 +27,12 @@ Generates textures                baseColor · metallic-roughness · normal
 ## Run
 
 ```bash
-pip install flask trimesh numpy pillow shapely scipy fast_simplification
+pip install -r requirements.txt
 python server.py            # → http://localhost:8000
 ```
+
+The web viewer defaults to **Anime** mode (cel shading + line art + soft contact shadow);
+switch to *Material* for straight PBR. Image builds run at 2048² textures.
 
 CLI (no UI):
 
@@ -44,10 +47,10 @@ python forge_cli.py --image concept.png --budget mobile --out out/hero
 |---|---|---|
 | **1. Analyze (AI)** | When `OPENROUTER_API_KEY` is set, the prompt or image is sent to an LLM / vision model through **OpenRouter** (`ai.py`). It returns style, proportions, a full palette, accessories, species and a one-line brief as JSON. For images the pixel-measured colours and heads-tall proportions still win (they're exact); the model contributes semantics. Free-tier models by default (`nex-agi/nex-n2.5-mini:free` → Gemma 4 → Qwen 3.8 → `openrouter/free`); set `OPENROUTER_MODEL` to use a paid one (e.g. `google/gemini-2.5-flash-lite`). Any failure (rate-limit, timeout) falls back to the heuristic analyzers below. | `ai.py` |
 | **1. Analyze (text, heuristic)** | Keyword semantics → species/build, style (chibi / stylized / realistic), accessories (backpack, wizard hat, sword, shield, cape, staff, horns, cat ears, tail, glasses), "`<colour> <part>`" grammar (e.g. *red armor*, *brown boots*). | `analyze_text` |
-| **1. Analyze (image, heuristic)** | Subject isolated from alpha or by border-colour flood segmentation; row-width profile finds the **neck pinch** → *heads-tall* → proportion style; shoulder width → build; positional colour priors (crown → hair, face → skin, torso, legs, feet). Occluded back is inferred by symmetry + semantic defaults. | `analyze_image` |
+| **1. Analyze (image, heuristic)** | Subject isolated from alpha or by margin-LUT segmentation + flood + morphological cleanup (handles gradient skies, HUD text, game screenshots); row-width profile finds the **neck pinch** → *heads-tall* → proportion style; shoulder width → build; positional colour priors (crown → hair, face → skin, torso, legs, feet). Occluded back is inferred by symmetry + semantic defaults. | `analyze_image` |
 | **2. Reconstruct geometry** | Character assembled as a volumetric primitive rig (head, hair cap, eyes, neck, torso, belt, arms, hands, legs, boots + accessories) in **Y-up, metres, A-pose**. | `build_character` |
 | **3. UVs** | Each part is box-projected into its own material tile of a 4×4 atlas → one material / one draw call. | `_part_uv`, `assemble` |
-| **4. Textures** | Procedural per-material detail (weave, leather grain, brushed metal, hair strands) → base colour, glTF metallic-roughness (B = metal, G = rough) and a Sobel normal map. | `paint_atlas` |
+| **4. Textures** | With image input the per-part tiles are **sampled from the concept art itself** (the character wears the reference design: face located by 2-D skin-blob detection, body bands per part), so the built model carries the art's colours and detail; text-only builds get procedural per-material detail (weave, leather grain, brushed metal, hair strands). Base colour + glTF metallic-roughness (B = metal, G = rough) + low-frequency normal map. | `paint_atlas` |
 | **5. Optimize** | Per-part quadric-error decimation (`fast_simplification`) to the budget: **Mobile ≈1.5k**, **Game ≈5k**, **Hero ≈15k** triangles; UVs are recomputed after decimation so seams never tear. | `optimize_parts` |
 | **6. Export** | `model.glb` (embedded PBR textures), `model.obj` + `.mtl` + PNGs, `model.stl`, plus `report.json`. | `finalize` |
 

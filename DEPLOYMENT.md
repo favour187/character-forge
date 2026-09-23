@@ -11,7 +11,7 @@
 | Plan / region | Free · Frankfurt (closest region to Abuja) |
 | Runtime | Python 3.12.9 · `gunicorn -w 1 --threads 4 -t 180 server:app` |
 | AI analysis | **OpenRouter** — key reused from your *Agent-ai* / *ai-screen-assistant-server* services (`sk-or-v1-d…23de`, free-tier key, $0 credits → free models only, ~50 req/day) · primary model `nex-agi/nex-n2.5-mini:free` with fallbacks |
-| Database | **not yet attached** — the Neon API key supplied returned `401`; app runs disk-only until `DATABASE_URL` is set |
+| Database | **Neon Postgres attached (2026-09-23)** — shared with the *gameforge-ai* project (`gameforge-api` service, `ep-purple-forest-b17w47jm` pooler, `neondb`); `/health` reports `database: true`, builds persist across deploys/restarts (table `characters`, kept to ≤80 rows) |
 | Deployed | 2026-09-23 |
 
 ## API
@@ -68,3 +68,16 @@ The tokens were shared in chat; rotate them when convenient (GitHub → Settings
   (free models spend ~2.5k tokens thinking before the JSON, so keep max_tokens generous).
 * Free-tier per-model limit is still ~50 requests/day on the cheap models; every build needs one
   plan call, so ~50 builds/day, then the rule planner takes over automatically.
+
+## Quality pass (2026-09-23, later)
+
+* **Viewer**: new *Anime* mode is the default — toon gradient shading, inverted-hull line art,
+  soft contact shadow; *Material* mode keeps straight PBR.
+* **Geometry**: face features (nose, brows, anime side-locks), pelvis/shoulder/ankle blend
+  volumes (seam-free silhouette), higher base tessellation at game budget.
+* **Concept-art texturing**: image builds sample the uploaded art onto the character (face via
+  2-D skin-blob detection with a face-likeness gate; per-part body bands; 2048² atlas).
+  Segmentation uses margin-LUT background estimation + flood + opening/erosion, so gradient
+  skies and HUD clutter in game screenshots are handled far better.
+* **Textures**: low-frequency normals (the raw Sobel grain read as noisy skin), cheek blush on
+  chibi/stylized text builds.

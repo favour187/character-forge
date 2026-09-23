@@ -13,7 +13,7 @@ src = ap.add_mutually_exclusive_group(required=True)
 src.add_argument("--text", help="character description")
 src.add_argument("--image", help="concept image (PNG/JPG)")
 ap.add_argument("--budget", choices=list(engine.BUDGETS), default="game")
-ap.add_argument("--tex", type=int, default=1024, help="atlas resolution (512/1024/2048)")
+ap.add_argument("--tex", type=int, default=None, help="atlas resolution (512/1024/2048; default: 2048 for image input)")
 ap.add_argument("--out", default="out/character", help="output directory")
 a = ap.parse_args()
 
