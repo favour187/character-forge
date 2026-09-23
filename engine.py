@@ -1267,6 +1267,11 @@ def run_pipeline(source="text", text=None, image_bytes=None, budget="game",
         for slot in (params.get("_sampled") or set()):   # names of pixel-sampled slots
             if slot in PLAN_SLOTS and slot not in sticky:
                 p[slot] = tuple(params[slot])
+    # an explicit colour request always wins, over both the model and the pixels
+    if text:
+        for slot, rgb in _param_diff(text.lower()).items():
+            if slot in PLAN_SLOTS and isinstance(rgb, tuple):
+                p[slot] = rgb
     done("Understand input (" + ai_info["plan_source"] + ")")
 
     # geometry budget: the plan decides unless the user capped it
