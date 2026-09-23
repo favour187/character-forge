@@ -23,12 +23,12 @@ GET  /health
 ```
 
 ## Redeploy after a code change
-Push to `main`, then (public repo without the GitHub-app link, so trigger it explicitly):
+**Auto-deploy is on** — every push to `main` builds and goes live in ~1–2 min (verified).
+Manual trigger if ever needed:
 ```bash
 curl -X POST -H "Authorization: Bearer $RENDER_API_KEY" \
      https://api.render.com/v1/services/srv-dapn30jbc2fs73bb6910/deploys
 ```
-or click **Manual Deploy → Deploy latest commit** in the dashboard.
 
 ## Attach Neon Postgres (persistent gallery)
 1. Create a project at https://console.neon.tech (or hand me a working `napi_…` key / connection string).
