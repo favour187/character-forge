@@ -1,0 +1,16 @@
+# Infrastructure-as-code for Render (Blueprint). The live service was created via the
+# Render API with the same settings; this file documents / reproduces them.
+services:
+  - type: web
+    name: character-forge
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -w 1 --threads 4 -t 180 -b 0.0.0.0:$PORT server:app
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.9"
+      - key: DATABASE_URL      # optional: Neon Postgres connection string
+        sync: false

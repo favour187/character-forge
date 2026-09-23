@@ -1,0 +1,9 @@
+flask==3.1.*
+gunicorn==23.*
+numpy<3
+pillow>=10
+trimesh>=4.4
+shapely>=2.0
+scipy>=1.11
+fast_simplification>=0.1.9
+psycopg[binary]>=3.2

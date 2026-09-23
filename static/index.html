@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Character Forge — text / image → game-ready 3D</title>
+<style>
+  :root{
+    --bg:#0d0f14; --panel:#151923; --panel2:#1c2130; --line:#262d3d;
+    --text:#e6e9f0; --muted:#8a93a8; --accent:#7c6cff; --accent2:#3ddc97;
+    --warn:#ffb454; --danger:#ff6b6b; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  header{display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#141827,#0f1320)}
+  header .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#4bd3ff);display:grid;place-items:center;font-weight:800;color:#fff}
+  header h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
+  header p{margin:0;color:var(--muted);font-size:12px}
+  main{flex:1;display:grid;grid-template-columns:330px 1fr 330px;min-height:0}
+  aside{background:var(--panel);border-right:1px solid var(--line);padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+  aside.right{border-right:0;border-left:1px solid var(--line)}
+  h2{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;font-weight:700}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+  textarea{width:100%;min-height:96px;resize:vertical;background:#0f131c;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit;outline:none}
+  textarea:focus{border-color:var(--accent)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .chip{font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--line);background:#11151f;color:var(--muted);cursor:pointer}
+  .chip:hover{border-color:var(--accent);color:var(--text)}
+  .drop{border:1.5px dashed #33405a;border-radius:10px;padding:14px;text-align:center;color:var(--muted);cursor:pointer;transition:.15s;position:relative;min-height:88px;display:grid;place-items:center}
+  .drop.over,.drop:hover{border-color:var(--accent);color:var(--text);background:#141a29}
+  .drop img{max-height:150px;max-width:100%;border-radius:8px}
+  .drop .clear{position:absolute;top:6px;right:8px;font-size:11px;color:var(--danger);cursor:pointer;background:#0f131c;padding:2px 7px;border-radius:6px}
+  select,button{font:inherit}
+  select{width:100%;background:#0f131c;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 10px}
+  .row{display:flex;gap:8px;align-items:center}
+  .row > *{flex:1}
+  button.primary{width:100%;padding:12px;border:0;border-radius:12px;background:linear-gradient(135deg,var(--accent),#5b8cff);color:#fff;font-weight:700;cursor:pointer;letter-spacing:.2px;box-shadow:0 6px 20px rgba(124,108,255,.25)}
+  button.primary:disabled{opacity:.55;cursor:progress}
+  .stages{display:flex;flex-direction:column;gap:7px}
+  .stage{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:#11151f;border:1px solid var(--line);font-size:13px}
+  .stage .dot{width:9px;height:9px;border-radius:50%;background:#2c3446;flex:none}
+  .stage.active .dot{background:var(--warn);box-shadow:0 0 0 4px rgba(255,180,84,.18);animation:pulse 1s infinite}
+  .stage.done .dot{background:var(--accent2)}
+  .stage .ms{margin-left:auto;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+  @keyframes pulse{50%{opacity:.5}}
+  #viewport{position:relative;background:radial-gradient(1200px 700px at 50% 30%,#1a2033 0%,#0b0d12 70%)}
+  #viewport canvas{display:block;width:100%;height:100%}
+  .overlay{position:absolute;left:16px;top:14px;display:flex;gap:8px;flex-wrap:wrap}
+  .tog{background:rgba(20,24,36,.85);border:1px solid var(--line);color:var(--text);padding:6px 10px;border-radius:9px;cursor:pointer;font-size:12px;backdrop-filter:blur(6px)}
+  .tog.on{border-color:var(--accent);color:#fff;background:rgba(124,108,255,.28)}
+  .empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--muted);pointer-events:none}
+  .empty b{display:block;color:var(--text);font-size:18px;margin-bottom:6px}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .stat{background:#11151f;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .stat b{display:block;font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
+  .stat span{font-size:11px;color:var(--muted)}
+  .swatches{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .sw{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
+  .sw i{width:18px;height:18px;border-radius:6px;border:1px solid rgba(255,255,255,.12);flex:none}
+  .tags{display:flex;flex-wrap:wrap;gap:6px}
+  .tag{font-size:11px;padding:3px 8px;border-radius:999px;background:rgba(61,220,151,.12);color:var(--accent2);border:1px solid rgba(61,220,151,.25)}
+  ul.notes{margin:0;padding-left:16px;color:var(--muted);font-size:12px}
+  .dl{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .dl a{display:block;text-align:center;padding:9px;border-radius:10px;border:1px solid var(--line);background:#11151f;color:var(--text);text-decoration:none;font-weight:600;font-size:13px}
+  .dl a:hover{border-color:var(--accent)}
+  .dl a small{display:block;font-weight:400;color:var(--muted);font-size:10px}
+  .atlas{width:100%;border-radius:10px;border:1px solid var(--line);image-rendering:auto;display:block}
+  .atlas-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .atlas-row figure{margin:0}
+  .atlas-row figcaption{font-size:10px;color:var(--muted);text-align:center;margin-top:3px}
+  pre{background:#0f131c;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:11px;overflow:auto;color:#c9d1e3;margin:0}
+  .error{background:rgba(255,107,107,.12);border:1px solid rgba(255,107,107,.35);color:#ffb3b3;border-radius:10px;padding:10px;font-size:12px;display:none}
+  .muted{color:var(--muted);font-size:12px}
+  .recent{display:flex;flex-direction:column;gap:6px}
+  .recent .item{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:9px;background:#11151f;border:1px solid var(--line);cursor:pointer;font-size:12px}
+  .recent .item:hover{border-color:var(--accent)}
+  .recent .item .p{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .recent .item .m{color:var(--muted);font-size:10px;white-space:nowrap}
+  .recent .item .s{font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(124,108,255,.18);color:#b9b1ff;white-space:nowrap}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">⬢</div>
+  <div>
+    <h1>Character Forge</h1>
+    <p>Text or concept image → analysis → mesh → UVs → PBR textures → game topology → Unity-ready GLB/OBJ</p>
+  </div>
+</header>
+
+<main>
+  <!-- ───────────── left: input ───────────── -->
+  <aside>
+    <div class="card">
+      <h2>1 · Input</h2>
+      <textarea id="prompt" placeholder="Describe the character… e.g. A stylized fantasy school student wearing a backpack, purple robe, pointed hat"></textarea>
+      <div class="chips" id="chips">
+        <span class="chip">fantasy school student with backpack, purple robe</span>
+        <span class="chip">chibi cat-girl mage with staff and pointy hat</span>
+        <span class="chip">muscular orc warrior, sword and shield, red armor</span>
+        <span class="chip">tall elf ranger, green cloak, brown boots</span>
+        <span class="chip">demon knight with horns, black cape, silver armor</span>
+      </div>
+      <div style="height:10px"></div>
+      <div class="drop" id="drop">
+        <input type="file" id="file" accept="image/*" hidden>
+        <div id="dropText">…or drop a <b>concept image</b> (PNG/JPG)<br><span class="muted">a transparent PNG or clean background works best</span></div>
+        <img id="preview" class="hidden" alt="">
+        <span class="clear hidden" id="clear">✕ remove</span>
+      </div>
+      <div style="height:10px"></div>
+      <div class="row">
+        <select id="budget" title="Polygon budget / topology target">
+          <option value="mobile">Mobile · ≤1.5k tris</option>
+          <option value="game" selected>Game · ≤5k tris</option>
+          <option value="high">Hero · ≤15k tris</option>
+        </select>
+      </div>
+      <div style="height:10px"></div>
+      <button class="primary" id="go">⚡ Generate 3D character</button>
+      <div style="height:8px"></div>
+      <div class="error" id="err"></div>
+    </div>
+
+    <div class="card">
+      <h2>Pipeline</h2>
+      <div class="stages" id="stages">
+        <div class="stage" data-i="0"><span class="dot"></span>AI analyzes input<span class="ms"></span></div>
+        <div class="stage" data-i="1"><span class="dot"></span>Reconstruct geometry (mesh)<span class="ms"></span></div>
+        <div class="stage" data-i="2"><span class="dot"></span>Optimize to game topology<span class="ms"></span></div>
+        <div class="stage" data-i="3"><span class="dot"></span>UV unwrap + bake PBR textures<span class="ms"></span></div>
+        <div class="stage" data-i="4"><span class="dot"></span>Export GLB / OBJ / STL<span class="ms"></span></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ───────────── center: 3D viewport ───────────── -->
+  <section id="viewport">
+    <div class="overlay">
+      <button class="tog on" data-view="lit">Lit (PBR)</button>
+      <button class="tog" data-view="wire">Wireframe</button>
+      <button class="tog" data-view="normal">Normals</button>
+      <button class="tog" data-view="uv">UV check</button>
+      <button class="tog" id="spin">⟳ Auto-rotate</button>
+    </div>
+    <div class="empty" id="empty">
+      <div><b>No model yet</b>Type a description or drop a concept image, then press Generate.<br>Drag to orbit · scroll to zoom · right-drag to pan</div>
+    </div>
+  </section>
+
+  <!-- ───────────── right: report / export ───────────── -->
+  <aside class="right">
+    <div class="card">
+      <h2>2 · Analysis</h2>
+      <div id="analysis" class="muted">The analyzer output (proportions, palette, detected parts) will appear here.</div>
+    </div>
+    <div class="card">
+      <h2>3 · Geometry & materials</h2>
+      <div class="stats" id="stats"></div>
+      <div style="height:10px"></div>
+      <div class="atlas-row" id="atlases"></div>
+    </div>
+    <div class="card">
+      <h2>4 · Export</h2>
+      <div class="dl" id="dl"><span class="muted">Generate a model to enable downloads.</span></div>
+      <div style="height:10px"></div>
+      <details>
+        <summary class="muted" style="cursor:pointer">Unity import notes</summary>
+        <pre>GLB  → drop into Assets/ (Unity 2020.3+ with
+       glTFast: Window ▸ Package Manager ▸
+       + Add by name ▸ com.unity.cloud.gltfast)
+       Materials/normal/metal-rough import automatically (URP/HDRP/Built-in).
+OBJ  → native import; assign texture_atlas.png
+       to Base Map manually.
+Scale → 1 unit = 1 metre, Y-up, A-pose.
+Rig  → Model ▸ Rig ▸ Humanoid works after
+       skinning in Blender/Mixamo.</pre>
+      </details>
+    </div>
+    <div class="card">
+      <h2>Recent characters <span id="persistNote" class="muted" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
+      <div id="recent" class="recent"><span class="muted">Nothing generated yet.</span></div>
+    </div>
+  </aside>
+</main>
+
+<script type="importmap">
+{ "imports": {
+  "three": "/static/vendor/three/build/three.module.js",
+  "three/addons/": "/static/vendor/three/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+/* ───────── viewer ───────── */
+const vp = document.getElementById('viewport');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+vp.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 100);
+camera.position.set(2.2, 1.5, 3.2);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.target.set(0, 0.9, 0);
+
+const key = new THREE.DirectionalLight(0xffffff, 2.2);
+key.position.set(3, 5, 4); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0005;
+scene.add(key, new THREE.HemisphereLight(0xbfd3ff, 0x2a2438, 0.6));
+
+const ground = new THREE.Mesh(new THREE.CircleGeometry(2.2, 64),
+  new THREE.ShadowMaterial({ opacity: 0.35 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const grid = new THREE.GridHelper(4, 16, 0x2a3348, 0x1b2130); grid.position.y = 0.001; scene.add(grid);
+
+let model = null, spin = false, view = 'lit';
+const uvTex = makeUVChecker();
+const loader = new GLTFLoader();
+
+function resize(){
+  const w = vp.clientWidth, h = vp.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(vp); resize();
+
+renderer.setAnimationLoop(() => {
+  controls.update();
+  if (model && spin) model.rotation.y += 0.005;
+  renderer.render(scene, camera);
+});
+
+function makeUVChecker(){
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const g = c.getContext('2d');
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++){
+    g.fillStyle = (x + y) % 2 ? '#6f7cff' : '#2b2f45'; g.fillRect(x * 64, y * 64, 64, 64);
+  }
+  g.fillStyle = '#fff'; g.font = 'bold 20px monospace';
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) g.fillText(`${x},${y}`, x * 64 + 6, y * 64 + 26);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; return t;
+}
+
+function applyView(){
+  if (!model) return;
+  model.traverse(o => {
+    if (!o.isMesh) return;
+    if (!o.userData.orig) o.userData.orig = o.material;
+    const orig = o.userData.orig;
+    if (view === 'lit') o.material = orig;
+    else if (view === 'wire') o.material = new THREE.MeshBasicMaterial({ color: 0x8fa3ff, wireframe: true });
+    else if (view === 'normal') o.material = new THREE.MeshNormalMaterial();
+    else if (view === 'uv') o.material = new THREE.MeshStandardMaterial({ map: uvTex, roughness: .8 });
+  });
+}
+
+async function loadModel(url){
+  if (model){ scene.remove(model); model = null; }
+  const gltf = await loader.loadAsync(url);
+  model = gltf.scene;
+  model.traverse(o => { if (o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
+  model.position.x -= ctr.x; model.position.z -= ctr.z; model.position.y -= box.min.y;
+  scene.add(model); applyView();
+  controls.target.set(0, size.y * 0.5, 0);
+  const d = Math.max(size.y * 1.7, 1.6);
+  camera.position.set(d * 0.65, size.y * 0.75, d);
+  document.getElementById('empty').classList.add('hidden');
+}
+
+document.querySelectorAll('.tog[data-view]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tog[data-view]').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); view = b.dataset.view; applyView();
+});
+document.getElementById('spin').onclick = e => { spin = !spin; e.target.classList.toggle('on', spin); };
+
+/* ───────── input UI ───────── */
+const promptEl = document.getElementById('prompt');
+const fileEl = document.getElementById('file'), drop = document.getElementById('drop');
+const preview = document.getElementById('preview'), dropText = document.getElementById('dropText');
+const clearBtn = document.getElementById('clear');
+let imageFile = null;
+
+document.querySelectorAll('.chip').forEach(c => c.onclick = () => { promptEl.value = c.textContent; });
+drop.onclick = e => { if (e.target !== clearBtn) fileEl.click(); };
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) setImage(f); });
+fileEl.onchange = () => { if (fileEl.files[0]) setImage(fileEl.files[0]); };
+clearBtn.onclick = e => { e.stopPropagation(); imageFile = null; preview.classList.add('hidden'); clearBtn.classList.add('hidden'); dropText.classList.remove('hidden'); fileEl.value = ''; };
+function setImage(f){
+  imageFile = f; preview.src = URL.createObjectURL(f);
+  preview.classList.remove('hidden'); clearBtn.classList.remove('hidden'); dropText.classList.add('hidden');
+}
+
+/* ───────── generate ───────── */
+const stages = [...document.querySelectorAll('.stage')];
+const goBtn = document.getElementById('go'), err = document.getElementById('err');
+let fakeTimer = null;
+
+function setStage(i, state, ms){
+  stages.forEach((s, k) => {
+    s.classList.remove('active', 'done');
+    if (k < i) s.classList.add('done');
+    if (k === i && state === 'active') s.classList.add('active');
+    if (k === i && state === 'done') s.classList.add('done');
+  });
+  if (ms != null) stages[i].querySelector('.ms').textContent = ms + ' ms';
+}
+
+goBtn.onclick = async () => {
+  err.style.display = 'none';
+  const fd = new FormData();
+  fd.append('text', promptEl.value.trim());
+  fd.append('budget', document.getElementById('budget').value);
+  if (imageFile) fd.append('image', imageFile);
+  if (!imageFile && !promptEl.value.trim()){ showErr('Type a description or drop a concept image.'); return; }
+
+  goBtn.disabled = true; goBtn.textContent = 'Forging…';
+  stages.forEach(s => s.querySelector('.ms').textContent = '');
+  let i = 0; setStage(0, 'active');
+  fakeTimer = setInterval(() => { if (i < stages.length - 1){ i++; setStage(i, 'active'); } }, 450);
+
+  try {
+    const r = await fetch('/generate', { method: 'POST', body: fd });
+    const data = await r.json();
+    clearInterval(fakeTimer);
+    if (!r.ok) throw new Error(data.error || 'Generation failed');
+    let prev = 0;
+    data.stages.forEach((s, k) => { setStage(k, 'done', s.ms - prev); prev = s.ms; });
+    stages.forEach(s => s.classList.add('done'));
+    renderReport(data);
+    await loadModel(data.preview);
+    loadRecent();
+  } catch (e) {
+    clearInterval(fakeTimer); stages.forEach(s => s.classList.remove('active'));
+    showErr(e.message);
+  } finally {
+    goBtn.disabled = false; goBtn.textContent = '⚡ Generate 3D character';
+  }
+};
+function showErr(m){ err.textContent = m; err.style.display = 'block'; }
+
+/* ───────── recent gallery ───────── */
+async function loadRecent(){
+  try {
+    const r = await fetch('/recent'); const d = await r.json();
+    document.getElementById('persistNote').textContent = d.persistent ? '· saved in Postgres' : '· this instance only';
+    const box = document.getElementById('recent');
+    if (!d.items.length){ box.innerHTML = '<span class="muted">Nothing generated yet.</span>'; return; }
+    box.innerHTML = d.items.map(it => `
+      <div class="item" data-id="${it.id}" title="${(it.prompt||'').replace(/"/g,'&quot;')}">
+        <span class="s">${it.style||''}</span>
+        <span class="p">${it.source === 'image' ? '🖼 concept image' : (it.prompt||'')}</span>
+        <span class="m">${(it.triangles||0).toLocaleString()} tris</span>
+      </div>`).join('');
+    box.querySelectorAll('.item').forEach(el => el.onclick = async () => {
+      err.style.display = 'none';
+      try {
+        const rr = await fetch('/report/' + el.dataset.id); const rep = await rr.json();
+        if (!rr.ok) throw new Error(rep.error || 'not found');
+        rep.id = rep.id || el.dataset.id;
+        renderReport(rep); await loadModel(rep.preview);
+        stages.forEach(s => { s.classList.add('done'); s.querySelector('.ms').textContent = ''; });
+      } catch (e) { showErr(e.message); }
+    });
+  } catch (e) { /* offline */ }
+}
+loadRecent();
+
+/* ───────── report ───────── */
+function renderReport(d){
+  const g = d.geometry;
+  document.getElementById('analysis').innerHTML = `
+    <div class="muted" style="margin-bottom:8px">Source: <b style="color:var(--text)">${d.source === 'image' ? 'concept image' : 'text prompt'}</b>
+      · style <b style="color:var(--text)">${d.style}</b> · height ${d.height_m} m</div>
+    <div class="tags">${[...new Set([...d.tags, ...d.accessories.map(a => a.replace('_',' '))])].map(t => `<span class="tag">${t}</span>`).join('')}</div>
+    <div style="height:10px"></div>
+    <div class="swatches">${Object.entries(d.palette).map(([k, v]) => `<div class="sw"><i style="background:${v}"></i>${k.replace('_',' ')}</div>`).join('')}</div>
+    <div style="height:10px"></div>
+    <ul class="notes">${d.notes.map(n => `<li>${n}</li>`).join('')}</ul>`;
+
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><b>${g.triangles.toLocaleString()}</b><span>triangles${g.decimated ? ` (from ${g.triangles_before_optimize.toLocaleString()})` : ''}</span></div>
+    <div class="stat"><b>${g.vertices.toLocaleString()}</b><span>vertices</span></div>
+    <div class="stat"><b>${g.materials}</b><span>material / draw call</span></div>
+    <div class="stat"><b>${g.texture_size}²</b><span>${g.maps.join(' · ')}</span></div>`;
+
+  const base = `/model/${d.id}/`;
+  document.getElementById('atlases').innerHTML = `
+    <figure><img class="atlas" src="${base}texture_atlas.png"><figcaption>Base color</figcaption></figure>
+    <figure><img class="atlas" src="${base}normal_atlas.png"><figcaption>Normal</figcaption></figure>
+    <figure><img class="atlas" src="${base}mr_atlas.png"><figcaption>Metal / rough</figcaption></figure>`;
+
+  document.getElementById('dl').innerHTML = `
+    <a href="${d.downloads.glb}" download>GLB<small>Unity (glTFast) · Godot · Web</small></a>
+    <a href="${d.downloads.obj}" download>OBJ + MTL<small>Unity native · Blender · Maya</small></a>
+    <a href="${d.downloads.stl}" download>STL<small>3D printing</small></a>
+    <a href="${d.downloads.texture}" download>Texture atlas<small>PNG ${g.texture_size}²</small></a>`;
+}
+</script>
+</body>
+</html>
