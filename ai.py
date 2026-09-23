@@ -31,9 +31,10 @@ TIMEOUT = float(os.environ.get("OPENROUTER_TIMEOUT_MS", "45000")) / 1000.0
 PRIMARY = os.environ.get("OPENROUTER_MODEL", "nex-agi/nex-n2.5-mini:free").strip()
 FALLBACKS = [m.strip() for m in os.environ.get(
     "OPENROUTER_FALLBACK_MODELS",
-    "google/gemma-4-31b-it:free,qwen/qwen3.8-27b:free,google/gemma-4-26b-a4b-it:free,"
-    "openrouter/free"
+    "openrouter/free,google/gemma-4-31b-it:free,qwen/qwen3.8-27b:free,"
+    "nex-agi/nex-n2.5-pro:free,google/gemma-4-26b-a4b-it:free,thinkingmachines/inkling:free"
 ).split(",") if m.strip()]
+RETRY_429 = (1.5, 4.0)          # back-off (seconds) for transient upstream rate limits
 PER_MODEL_TIMEOUT = min(TIMEOUT, 30.0)
 TOTAL_BUDGET = float(os.environ.get("OPENROUTER_TOTAL_BUDGET_S", "70"))
 
@@ -86,37 +87,47 @@ def _extract_json(text):
     raise ValueError("model returned no JSON object")
 
 
+def _attempt(model, messages):
+    res = _post({"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 700})
+    if "error" in res:
+        raise RuntimeError(str(res["error"].get("message", res["error"]))[:160])
+    msg = res["choices"][0]["message"]
+    content = msg.get("content")
+    if isinstance(content, list):                 # multi-part content
+        content = "".join(p.get("text", "") for p in content)
+    if not content:                                # reasoning-only models
+        content = msg.get("reasoning") or ""
+    return _extract_json(content), res.get("model", model)
+
+
 def _chat(messages):
-    """Try the primary model then each fallback in turn. Returns (data, model)."""
+    """Primary model (with back-off on 429) then each fallback in turn."""
     chain = [PRIMARY] + [m for m in FALLBACKS if m != PRIMARY]
     errors = []
     t0 = time.time()
-    for model in chain:
-        if time.time() - t0 > TOTAL_BUDGET:
-            errors.append("time budget exhausted")
-            break
-        payload = {"model": model, "messages": messages,
-                   "temperature": 0.2, "max_tokens": 700}
-        try:
-            res = _post(payload)
-            if "error" in res:
-                raise RuntimeError(str(res["error"].get("message", res["error"]))[:160])
-            msg = res["choices"][0]["message"]
-            content = msg.get("content")
-            if isinstance(content, list):            # multi-part content
-                content = "".join(p.get("text", "") for p in content)
-            if not content:                           # reasoning-only models
-                content = msg.get("reasoning") or ""
-            return _extract_json(content), res.get("model", model)
-        except urllib.error.HTTPError as e:
-            body = e.read()[:160].decode("utf-8", "ignore")
-            errors.append(f"{model}: HTTP {e.code} {body}")
-            if e.code in (401, 403):
-                break                                 # key problem: stop trying
-        except Exception as e:  # noqa: BLE001
-            errors.append(f"{model}: {str(e)[:120]}")
-        time.sleep(0.3)
-    raise RuntimeError(" | ".join(errors)[-400:])
+    for i, model in enumerate(chain):
+        retries = RETRY_429 if i == 0 else (RETRY_429[:1] if model == "openrouter/free" else ())
+        for attempt in range(len(retries) + 1):
+            if time.time() - t0 > TOTAL_BUDGET:
+                raise RuntimeError(f"AI time budget exhausted after {len(errors)} attempts; "
+                                   f"last: {errors[-1] if errors else '-'}")
+            try:
+                return _attempt(model, messages)
+            except urllib.error.HTTPError as e:
+                body = e.read()[:120].decode("utf-8", "ignore")
+                errors.append(f"{model}: HTTP {e.code}")
+                if e.code in (401, 403):
+                    raise RuntimeError(f"OpenRouter rejected the API key (HTTP {e.code})")
+                if e.code == 429 and attempt < len(retries):
+                    time.sleep(retries[attempt])
+                    continue
+                break
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"{model}: {str(e)[:80]}")
+                break
+        time.sleep(0.2)
+    raise RuntimeError(f"all {len(chain)} free models unavailable ({len(errors)} attempts, "
+                       f"mostly rate-limited) - last: {errors[-1] if errors else '-'}")
 
 
 def _hex_to_rgb(h):
