@@ -468,12 +468,15 @@ def too_large(_e):
 
 @app.route("/health")
 def health():
-    neural_3d = bool(os.environ.get("HY3D_API_URL", "").strip())
+    try:
+        import neural3d
+        neural = neural3d.status()
+    except Exception:
+        neural = {"available": False, "loaded": False, "device": "unavailable"}
     return jsonify({"ok": True, "database": DB_READY, "ai": ai.available(),
                     "ai_model": ai.PRIMARY if ai.available() else None,
                     "planner": "ai-director",
-                    "neural_3d": neural_3d,
-                    "neural_3d_provider": "hunyuan3d" if neural_3d else None,
+                    "neural_3d": neural,
                     "modes": ["character", "sculpt", "relief"],
                     "memory": memguard.status() if memguard else None})
 
