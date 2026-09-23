@@ -100,7 +100,9 @@ Renders of the exported meshes (four camera angles, textured, vertex-tinted back
 |---|---|---|
 | ![relief](docs/sculpt-relief.png) | ![mobile](docs/sculpt-mobile.png) | ![rig](docs/ui-character-rig.png) |
 
-Older UI screenshots of the previous chat layout are in [`docs/`](docs) as well.
+Every image above is regenerated from the fixtures by `python3 tests/preview.py`, so the
+samples track the code instead of rotting. `docs/` also holds the write-up of the memory
+limit ([`docs/MEMORY.md`](docs/MEMORY.md)) and the full HTTP contract ([`docs/API.md`](docs/API.md)).
 
 ## UI
 
