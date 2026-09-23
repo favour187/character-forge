@@ -213,24 +213,3 @@ Auto-deploy on push to `main`; the whole service is described in `render.yaml`. 
 command and how to attach Neon: **[DEPLOYMENT.md](DEPLOYMENT.md)**. If you care about the memory limit —
 and on the free plan you do — read **[docs/MEMORY.md](docs/MEMORY.md)**: it has the measured peak of every
 configuration and the exact OOM event this repo had.
-
-
-## Real neural 3D reconstruction
-
-Character Forge can use a Hunyuan3D-compatible API for image-to-3D reconstruction. This is separate from the language-model director: the director interprets the character, while the 3D model produces the actual mesh.
-
-Set these environment variables on the Character Forge server:
-
-- `HY3D_API_URL` — base URL of the Hunyuan3D API server.
-- `HY3D_TIMEOUT_S` — optional request timeout; default `600`.
-- `HY3D_RESOLUTION` — optional mesh resolution, default `256`.
-- `HY3D_STEPS` — optional inference steps, default `8`.
-- `HY3D_FACE_COUNT` — optional maximum face count for textured output.
-
-When `HY3D_API_URL` is configured and an image is uploaded, the image path is:
-
-`image -> OpenRouter/AI director -> Hunyuan3D -> real GLB`
-
-If the neural provider is not configured or is temporarily unavailable, Character Forge falls back to its legacy CPU primitive pipeline and records the neural-provider error in the build report.
-
-The Hunyuan3D server itself needs GPU compute; Character Forge does not bundle the large model weights into this repository.
