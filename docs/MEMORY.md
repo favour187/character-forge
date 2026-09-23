@@ -66,6 +66,20 @@ was enough.
 **After** the guard, the same 6-way concurrent image burst on the emulated 512 MB budget:
 `VmHWM` (peak) **224 MB**, steady RSS 141 MB, all six requests 200 OK, `/health` still green.
 
+**And on the real free instance**, after deploying `744f946`:
+
+```
+$ python3 tests/check.py https://character-forge.onrender.com --slow
+done in 96s - 58 passed, 0 failed
+concurrency burst: [200 x6] in 38s
+$ curl -s https://character-forge.onrender.com/health | jq .memory
+{"limit_mb": 512, "used_mb": 155, "headroom_mb": 357, "atlas_px": 1024, "queued": 0, "serialised": true}
+$ curl -s .../services/srv-dapn30jbc2fs73bb6910/events   # build_ended, deploy_ended - no server_failed
+```
+
+Note `/health` reading `limit_mb: 512` on Render: that means `memguard` found the real cgroup ceiling,
+not a fallback — so the atlas it picked is sized against the number that actually kills the box.
+
 ## What enforces it now — `memguard.py`
 
 | lever | what it does |

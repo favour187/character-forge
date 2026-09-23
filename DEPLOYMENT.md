@@ -103,4 +103,5 @@ Nothing secret is in this repository. `git log -p | grep -i "ghp_\|rnd_\|sk-or"`
 | 2026-09-23 | `d154c82`, `76d2325` | chat UI + AI build director; explicit colours win |
 | 2026-09-23 | `16a22de` | float32 atlas + in-place normal map — first response to the OOM kill |
 | 2026-09-23 | `cc9670c` | docs: note the atlas fix |
-| 2026-09-23 | *(this push)* | **`sculpt.py`: any image → watertight 3D. `memguard.py`: build slot + memory-sized atlas + `malloc_trim`, mode router, `429/503` semantics, `Retry-After`, disk pruning, `tests/check.py`, rebuilt responsive UI** |
+| 2026-09-23 | `744f946` | **`sculpt.py`: any image → watertight 3D. `memguard.py`: build slot + memory-sized atlas + `malloc_trim`, mode router, `429/503` semantics, `Retry-After`, disk pruning, `tests/check.py`, rebuilt responsive UI. `docs/API.md`, `docs/MEMORY.md`, `tests/preview.py`** |
+| 2026-09-23 | `744f946` (live) | verified on the free instance: 58/58 end-to-end checks pass, 6 concurrent image builds all 200 in 38 s, `/health` memory 155 MB used of 512, **no `oomKilled` since** |
