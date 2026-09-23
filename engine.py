@@ -1707,6 +1707,20 @@ def run_pipeline(source="text", text=None, image_bytes=None, budget="game",
                 p[slot] = rgb
     done("Understand input (" + ai_info["plan_source"] + ")")
 
+    # geometry budget: the plan decides unless the user capped it
+    b = dict(BUDGETS["game" if budget in (None, "auto") else budget])
+    det = plan.get("detail") or {}
+    for key, lo, hi in (("sphere_sub", 1, 4), ("cyl_sec", 6, 32), ("cap_cnt", 4, 32)):
+        if isinstance(det.get(key), (int, float)):
+            b[key] = int(max(lo, min(hi, det[key])))
+    b["cap_cnt"] = tuple(b["cap_cnt"]) if isinstance(b["cap_cnt"], (list, tuple)) else (b["cap_cnt"], b["cap_cnt"])
+    if len(b["cap_cnt"]) == 1:
+        b["cap_cnt"] = (b["cap_cnt"][0], b["cap_cnt"][0])
+    target = int(plan.get("target_tris") or b["tris"])
+    if budget_hint:
+        target = min(target, budget_hint)
+    target = max(400, min(40000, target))
+
     # ------------------------------------------------------------------
     # Real neural reconstruction route
     # ------------------------------------------------------------------
@@ -1767,19 +1781,6 @@ def run_pipeline(source="text", text=None, image_bytes=None, budget="game",
             # primitive result came from a neural 3D model.
             ai_info["neural_3d_error"] = str(e)[:500]
 
-    # geometry budget: the plan decides unless the user capped it
-    b = dict(BUDGETS["game" if budget in (None, "auto") else budget])
-    det = plan.get("detail") or {}
-    for key, lo, hi in (("sphere_sub", 1, 4), ("cyl_sec", 6, 32), ("cap_cnt", 4, 32)):
-        if isinstance(det.get(key), (int, float)):
-            b[key] = int(max(lo, min(hi, det[key])))
-    b["cap_cnt"] = tuple(b["cap_cnt"]) if isinstance(b["cap_cnt"], (list, tuple)) else (b["cap_cnt"], b["cap_cnt"])
-    if len(b["cap_cnt"]) == 1:
-        b["cap_cnt"] = (b["cap_cnt"][0], b["cap_cnt"][0])
-    target = int(plan.get("target_tris") or b["tris"])
-    if budget_hint:
-        target = min(target, budget_hint)
-    target = max(400, min(40000, target))
 
     parts, geo_notes = build_character(p, b)
     extra, extra_notes = build_extra_parts(plan, p, b)
