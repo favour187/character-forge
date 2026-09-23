@@ -10,6 +10,7 @@ import zipfile
 
 from flask import Flask, jsonify, request, send_file, send_from_directory
 
+import ai
 import db
 import engine
 
@@ -60,10 +61,11 @@ def generate():
         model_dir = os.path.join(MODELS, mid)
         os.makedirs(model_dir, exist_ok=True)
 
+        use_ai = request.form.get("use_ai", "1") not in ("0", "false", "off")
         report = engine.run_pipeline(
             source=source, text=text, image_bytes=image_bytes,
             budget=budget, model_dir=model_dir,
-            prompt=text or "(concept image)")
+            prompt=text or "(concept image)", use_ai=use_ai)
         report["id"] = mid
         report["budget"] = budget
         report["downloads"] = _downloads(mid)
@@ -144,7 +146,8 @@ def model_file(mid, name):
 
 @app.route("/health")
 def health():
-    return jsonify({"ok": True, "database": DB_READY})
+    return jsonify({"ok": True, "database": DB_READY, "ai": ai.available(),
+                    "ai_model": ai.PRIMARY if ai.available() else None})
 
 
 if __name__ == "__main__":

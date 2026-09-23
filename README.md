@@ -42,13 +42,23 @@ python forge_cli.py --image concept.png --budget mobile --out out/hero
 
 | Stage | What happens | Where |
 |---|---|---|
-| **1. Analyze (text)** | Keyword semantics → species/build, style (chibi / stylized / realistic), accessories (backpack, wizard hat, sword, shield, cape, staff, horns, cat ears, tail, glasses), "`<colour> <part>`" grammar (e.g. *red armor*, *brown boots*). | `analyze_text` |
-| **1. Analyze (image)** | Subject isolated from alpha or by border-colour flood segmentation; row-width profile finds the **neck pinch** → *heads-tall* → proportion style; shoulder width → build; positional colour priors (crown → hair, face → skin, torso, legs, feet). Occluded back is inferred by symmetry + semantic defaults. | `analyze_image` |
+| **1. Analyze (AI)** | When `OPENROUTER_API_KEY` is set, the prompt or image is sent to an LLM / vision model through **OpenRouter** (`ai.py`). It returns style, proportions, a full palette, accessories, species and a one-line brief as JSON. For images the pixel-measured colours and heads-tall proportions still win (they're exact); the model contributes semantics. Free-tier models by default (`nex-agi/nex-n2.5-mini:free` → Gemma 4 → Qwen 3.8 → `openrouter/free`); set `OPENROUTER_MODEL` to use a paid one (e.g. `google/gemini-2.5-flash-lite`). Any failure (rate-limit, timeout) falls back to the heuristic analyzers below. | `ai.py` |
+| **1. Analyze (text, heuristic)** | Keyword semantics → species/build, style (chibi / stylized / realistic), accessories (backpack, wizard hat, sword, shield, cape, staff, horns, cat ears, tail, glasses), "`<colour> <part>`" grammar (e.g. *red armor*, *brown boots*). | `analyze_text` |
+| **1. Analyze (image, heuristic)** | Subject isolated from alpha or by border-colour flood segmentation; row-width profile finds the **neck pinch** → *heads-tall* → proportion style; shoulder width → build; positional colour priors (crown → hair, face → skin, torso, legs, feet). Occluded back is inferred by symmetry + semantic defaults. | `analyze_image` |
 | **2. Reconstruct geometry** | Character assembled as a volumetric primitive rig (head, hair cap, eyes, neck, torso, belt, arms, hands, legs, boots + accessories) in **Y-up, metres, A-pose**. | `build_character` |
 | **3. UVs** | Each part is box-projected into its own material tile of a 4×4 atlas → one material / one draw call. | `_part_uv`, `assemble` |
 | **4. Textures** | Procedural per-material detail (weave, leather grain, brushed metal, hair strands) → base colour, glTF metallic-roughness (B = metal, G = rough) and a Sobel normal map. | `paint_atlas` |
 | **5. Optimize** | Per-part quadric-error decimation (`fast_simplification`) to the budget: **Mobile ≈1.5k**, **Game ≈5k**, **Hero ≈15k** triangles; UVs are recomputed after decimation so seams never tear. | `optimize_parts` |
 | **6. Export** | `model.glb` (embedded PBR textures), `model.obj` + `.mtl` + PNGs, `model.stl`, plus `report.json`. | `finalize` |
+
+## Environment variables
+
+| Var | Purpose |
+|---|---|
+| `OPENROUTER_API_KEY` | enables the AI analysis stage (optional) |
+| `OPENROUTER_MODEL` / `OPENROUTER_FALLBACK_MODELS` | model chain (defaults are free vision models) |
+| `DATABASE_URL` | Neon/Postgres mirror for the gallery (optional) |
+| `FORGE_KEEP_ROWS` | max rows kept in Postgres (default 80) |
 
 ## Unity import
 
@@ -77,8 +87,8 @@ The analyzer is a deterministic vision/NLP heuristic and the reconstruction is
 parametric, so it runs in ~1 s on CPU. Every stage is a function with a clean
 contract, so you can swap in a neural model per stage:
 
-* **Analyze** → replace `analyze_image` with a VLM/CLIP prompt that returns the same
-  `params` dict (skin/hair/garment colours, style, accessories, build).
+* **Analyze** → already pluggable: `ai.py` talks to any OpenRouter model; swap `OPENROUTER_MODEL`
+  for a stronger vision model when credits allow.
 * **Reconstruct** → replace `build_character` with an image-to-3D network (TripoSR,
   InstantMesh, Hunyuan3D…) returning a `trimesh.Trimesh`; the UV / texture / optimize /
   export stages work unchanged.

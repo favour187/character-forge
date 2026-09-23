@@ -58,6 +58,9 @@
   .sw{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
   .sw i{width:18px;height:18px;border-radius:6px;border:1px solid rgba(255,255,255,.12);flex:none}
   .tags{display:flex;flex-wrap:wrap;gap:6px}
+  .brief{background:linear-gradient(135deg,rgba(124,108,255,.14),rgba(75,211,255,.08));border:1px solid rgba(124,108,255,.35);border-radius:10px;padding:9px 11px;font-size:12.5px;line-height:1.45;margin-bottom:10px}
+  .brief .who{display:block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#b9b1ff;margin-bottom:3px}
+  .brief.off{border-color:rgba(255,180,84,.35);background:rgba(255,180,84,.08)} .brief.off .who{color:var(--warn)}
   .tag{font-size:11px;padding:3px 8px;border-radius:999px;background:rgba(61,220,151,.12);color:var(--accent2);border:1px solid rgba(61,220,151,.25)}
   ul.notes{margin:0;padding-left:16px;color:var(--muted);font-size:12px}
   .dl{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -117,6 +120,11 @@
           <option value="high">Hero · ≤15k tris</option>
         </select>
       </div>
+      <div style="height:10px"></div>
+      <label class="row" style="gap:8px;font-size:12px;color:var(--muted);cursor:pointer;align-items:center">
+        <input type="checkbox" id="useAi" checked style="flex:none;width:15px;height:15px;accent-color:var(--accent)">
+        <span style="flex:1">AI analysis via OpenRouter <span id="aiState" class="muted">(checking…)</span></span>
+      </label>
       <div style="height:10px"></div>
       <button class="primary" id="go">⚡ Generate 3D character</button>
       <div style="height:8px"></div>
@@ -326,6 +334,7 @@ goBtn.onclick = async () => {
   const fd = new FormData();
   fd.append('text', promptEl.value.trim());
   fd.append('budget', document.getElementById('budget').value);
+  fd.append('use_ai', document.getElementById('useAi').checked ? '1' : '0');
   if (imageFile) fd.append('image', imageFile);
   if (!imageFile && !promptEl.value.trim()){ showErr('Type a description or drop a concept image.'); return; }
 
@@ -380,11 +389,22 @@ async function loadRecent(){
   } catch (e) { /* offline */ }
 }
 loadRecent();
+fetch('/health').then(r => r.json()).then(h => {
+  const el = document.getElementById('aiState'), cb = document.getElementById('useAi');
+  if (h.ai){ el.textContent = '· ' + (h.ai_model || 'ready'); }
+  else { el.textContent = '(no API key on this server)'; cb.checked = false; cb.disabled = true; }
+}).catch(() => {});
 
 /* ───────── report ───────── */
+function aiBlock(d){
+  const a = d.ai || {};
+  if (a.used) return `<div class="brief"><span class="who">🤖 ${a.model}</span>${a.brief || 'Character analysed by the language model.'}</div>`;
+  if (a.enabled && a.error) return `<div class="brief off"><span class="who">⚠ AI analysis fell back to heuristics</span><span class="muted">${String(a.error).slice(0,160)}</span></div>`;
+  return '';
+}
 function renderReport(d){
   const g = d.geometry;
-  document.getElementById('analysis').innerHTML = `
+  document.getElementById('analysis').innerHTML = aiBlock(d) + `
     <div class="muted" style="margin-bottom:8px">Source: <b style="color:var(--text)">${d.source === 'image' ? 'concept image' : 'text prompt'}</b>
       · style <b style="color:var(--text)">${d.style}</b> · height ${d.height_m} m</div>
     <div class="tags">${[...new Set([...d.tags, ...d.accessories.map(a => a.replace('_',' '))])].map(t => `<span class="tag">${t}</span>`).join('')}</div>

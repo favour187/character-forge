@@ -10,6 +10,7 @@
 | Render workspace | **My game** (`tea-d8nsc3bsq97s73bor410`) — *"My Workspace" had its free-tier quota exhausted* |
 | Plan / region | Free · Frankfurt (closest region to Abuja) |
 | Runtime | Python 3.12.9 · `gunicorn -w 1 --threads 4 -t 180 server:app` |
+| AI analysis | **OpenRouter** — key reused from your *Agent-ai* / *ai-screen-assistant-server* services (`sk-or-v1-d…23de`, free-tier key, $0 credits → free models only, ~50 req/day) · primary model `nex-agi/nex-n2.5-mini:free` with fallbacks |
 | Database | **not yet attached** — the Neon API key supplied returned `401`; app runs disk-only until `DATABASE_URL` is set |
 | Deployed | 2026-09-23 |
 
@@ -39,6 +40,11 @@ curl -X PUT -H "Authorization: Bearer $RENDER_API_KEY" -H "Content-Type: applica
      -d '{"value":"postgresql://USER:PASSWORD@HOST/neondb?sslmode=require"}'
 ```
 The schema is created on first boot (`db.init()`); `/health` then reports `"database": true`.
+
+## OpenRouter notes
+* The key is a **free-tier key with $0 credits**: only `:free` models work and OpenRouter caps them at ~50 requests/day (1000/day once the account holds ≥ $10 credits). Past the cap the app silently falls back to the heuristic analyzer — the analysis card shows an amber "fell back" notice.
+* To use a stronger paid vision model after topping up: set `OPENROUTER_MODEL=google/gemini-2.5-flash-lite` (or `openai/gpt-4.1-mini`) on the Render service.
+* Uncheck **AI analysis** in the UI to run the pure heuristic pipeline (instant, offline).
 
 ## Free-tier notes
 * The instance sleeps after 15 min idle — the first request afterwards takes ~50 s to wake.

@@ -320,29 +320,32 @@ def analyze_image(png_bytes):
 
     p = default_params()
     p["source_notes"] = [seg_note]
+    p["_sampled"] = set()
     hair = crown[0] if crown else None
     skin = next((c for c in face if skinness(c) and (hair is None or dist(c, hair) > 30)), None)
     if skin is None and face:
         skin = next((c for c in face if hair is None or dist(c, hair) > 30), None)
     if skin:
-        p["skin"] = skin
+        p["skin"] = skin; p["_sampled"].add("skin")
         p["source_notes"].append("Skin tone sampled from face region")
     else:
         p["source_notes"].append("No skin tone found - using default")
     if hair:
-        p["hair"] = hair
+        p["hair"] = hair; p["_sampled"].add("hair")
         p["source_notes"].append("Hair colour sampled from crown of head")
     if mid:
-        p["garment_a"] = mid[0]
+        p["garment_a"] = mid[0]; p["_sampled"].add("garment_a")
         p["source_notes"].append("Primary garment colour sampled from torso")
         second = next((c for c in mid[1:] if dist(c, mid[0]) > 40 and
                        (skin is None or dist(c, skin) > 30)), None)
         p["garment_b"] = second or tuple(int(min(255, v * 1.15 + 20)) for v in mid[0])
+        if second:
+            p["_sampled"].add("garment_b")
     if low:
-        p["pants"] = low[0]
+        p["pants"] = low[0]; p["_sampled"].add("pants")
         p["source_notes"].append("Lower garment colour sampled from legs")
     if feet:
-        p["boots"] = feet[0]
+        p["boots"] = feet[0]; p["_sampled"].add("boots")
     top = crown + face
 
     if heads_tall < 3.9:
@@ -351,6 +354,7 @@ def analyze_image(png_bytes):
         p["style"] = "realistic"
     p["build"] = float(np.clip(0.55 + shoulder_w * 1.9, 0.82, 1.3))
     p["height"] = float(np.clip(1.25 + heads_tall * 0.085, 1.3, 1.9))
+    p["_sampled"].update({"build", "height", "style"})
     p["tags"] = [f"{heads_tall:.1f} heads tall", f"silhouette aspect {aspect:.2f}",
                  f"{p['style']} proportions"]
 
@@ -805,7 +809,8 @@ def swatch(rgb):
 # ----------------------------------------------------------------------------
 
 def run_pipeline(source="text", text=None, image_bytes=None,
-                 budget="game", tex_size=1024, model_dir=".", prompt=""):
+                 budget="game", tex_size=1024, model_dir=".", prompt="",
+                 use_ai=True):
     t0 = time.time()
     stages = []
 
@@ -816,7 +821,23 @@ def run_pipeline(source="text", text=None, image_bytes=None,
         params = analyze_image(image_bytes)
     else:
         params = analyze_text(text)
-    done("Analyze input")
+
+    ai_info = {"enabled": False, "used": False, "model": None, "brief": None, "error": None}
+    try:
+        import ai
+        ai_info["enabled"] = ai.available()
+        if use_ai and ai.available():
+            if source == "image":
+                llm, model = ai.analyze_image(image_bytes, hint=text or "")
+            else:
+                llm, model = ai.analyze_text(text)
+            params = ai.merge(params, llm, source)
+            ai_info.update(used=True, model=model, brief=llm.get("brief"))
+    except Exception as e:  # noqa: BLE001
+        ai_info["error"] = str(e)[:300]
+        params.setdefault("source_notes", []).insert(
+            0, "AI analysis unavailable - heuristic analyzer used")
+    done("Analyze input" + (" (AI)" if ai_info["used"] else ""))
 
     b = BUDGETS[budget]
     parts, geo_notes = build_character(params, b)
@@ -852,5 +873,6 @@ def run_pipeline(source="text", text=None, image_bytes=None,
             "maps": ["baseColor", "metallicRoughness", "normal"],
         },
         "height_m": round(float(params["height"]), 2),
+        "ai": ai_info,
     }
     return report
