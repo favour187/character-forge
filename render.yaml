@@ -1,10 +1,10 @@
 # Infrastructure-as-code for Render (Blueprint). The live service was created via the
-# Render API with the same settings; this file documents / reproduces them.
+# Render API with these same settings; this file documents / reproduces them.
 services:
   - type: web
     name: character-forge
     runtime: python
-    plan: free
+    plan: free                      # 0.1 CPU / 512 MB -> see docs/MEMORY.md
     region: frankfurt
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn -w 1 --threads 4 -t 180 -b 0.0.0.0:$PORT server:app
@@ -12,5 +12,13 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.9"
-      - key: DATABASE_URL      # optional: Neon Postgres connection string
+      - key: DATABASE_URL           # optional: Neon Postgres connection string
+        sync: false
+      - key: OPENROUTER_API_KEY     # optional: AI director (free models work)
+        sync: false
+      - key: FORGE_KEEP_MODELS      # build folders kept on the ephemeral disk
+        value: "24"
+      - key: FORGE_QUEUE_WAIT_S     # how long /chat waits for the build slot
+        value: "75"
+      - key: FORGE_MAX_TEXTURE      # advanced: force 512/1024/2048 (0 = auto)
         sync: false

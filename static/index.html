@@ -2,208 +2,402 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Character Forge — talk your way to a 3D character</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Character Forge — turn any image or a sentence into a game-ready 3D model: PBR textures, GLB/OBJ/STL, straight from the browser.">
+<title>Character Forge — any image to a game-ready 3D model</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='25' font-size='26'>&#128296;</text></svg>">
 <style>
-  :root{
-    --bg:#0b0d14; --bg2:#11141f; --panel:#151a27; --panel2:#1b2130; --line:#252c3d;
-    --text:#e9ecf5; --muted:#8c95ad; --accent:#6f7cff; --accent2:#37d6a0;
-    --warn:#f5b544; --user:#223055; --radius:16px;
-    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%}
-  body{margin:0;background:radial-gradient(1200px 700px at 80% -10%,#1b2340 0%,transparent 60%),var(--bg);
-       color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
-  a{color:var(--accent);text-decoration:none}
-  button{font:inherit;color:inherit;cursor:pointer}
-  .app{display:grid;grid-template-columns:minmax(420px,1fr) minmax(360px,42%);height:100vh}
+/* ── tokens ─────────────────────────────────────────────────────────────── */
+:root{
+  --bg:#0a0c12; --bg-2:#0e1119; --panel:#141926; --panel-2:#1a2130; --raise:#20283a;
+  --line:#252d40; --line-2:#323c56;
+  --text:#e9ecf5; --muted:#8e97b0; --dim:#6b7492;
+  --accent:#7081ff; --accent-ink:#dfe3ff; --accent-2:#34d9a4; --warn:#f0b955; --bad:#ff7a7a;
+  --r:14px; --r-sm:10px; --r-lg:20px;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --tap:44px;                       /* never below a thumb */
+  --maxw:1560px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;color:var(--text);background:
+    radial-gradient(1100px 620px at 88% -12%,#1c2444 0,transparent 62%),
+    radial-gradient(900px 520px at -8% 108%,#152232 0,transparent 60%),var(--bg);
+  font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;overflow:hidden;
+}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+h1,h2,h3,p{margin:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.muted{color:var(--muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
-  /* ── header ────────────────────────────────────────────── */
-  header{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line);
-         background:rgba(11,13,20,.82);backdrop-filter:blur(8px)}
-  .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent2));
-        display:grid;place-items:center;font-size:16px}
-  h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
-  .sub{font-size:11.5px;color:var(--muted)}
-  .spacer{flex:1}
-  .hbtn{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:7px 11px;font-size:12.5px}
-  .hbtn:hover{border-color:#3a4560;background:var(--panel2)}
-  .hbtn.on{border-color:var(--accent);color:#cfd6ff}
+/* ── shell ──────────────────────────────────────────────────────────────── */
+.shell{display:grid;grid-template-rows:auto auto 1fr;height:100dvh;max-width:var(--maxw);margin:0 auto}
+header{
+  display:flex;align-items:center;gap:12px;padding:10px clamp(12px,2.2vw,22px);
+  border-bottom:1px solid var(--line);background:rgba(10,12,18,.72);backdrop-filter:blur(10px)
+}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.mark{width:34px;height:34px;border-radius:11px;flex:0 0 34px;display:grid;place-items:center;
+  background:linear-gradient(140deg,var(--accent),var(--accent-2));box-shadow:0 6px 20px rgba(112,129,255,.28)}
+.mark svg{width:19px;height:19px}
+.brand h1{font-size:16px;font-weight:650;letter-spacing:.2px;white-space:nowrap}
+.brand .sub{font-size:11.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spacer{flex:1 1 auto}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);
+  border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:5px 10px;white-space:nowrap}
+.pill b{color:var(--text);font-weight:600}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--dim);flex:0 0 7px}
+.dot.ok{background:var(--accent-2);box-shadow:0 0 0 3px rgba(52,217,164,.15)}
+.dot.warn{background:var(--warn);box-shadow:0 0 0 3px rgba(240,185,85,.15)}
+.dot.busy{background:var(--accent);animation:pulse 1.1s infinite}
+@keyframes pulse{50%{opacity:.35}}
+.hbtn{border:1px solid var(--line);background:var(--panel);border-radius:var(--r-sm);padding:8px 12px;
+  font-size:12.5px;min-height:var(--tap);display:inline-flex;align-items:center;gap:6px;transition:.16s}
+.hbtn:hover{border-color:var(--line-2);background:var(--panel-2)}
+.hbtn.ghost{background:transparent}
 
-  /* ── iframe / download banner ──────────────────────────── */
-  #frameNote{display:none;gap:10px;align-items:center;padding:9px 18px;font-size:12.5px;
-             background:rgba(245,181,68,.1);border-bottom:1px solid rgba(245,181,68,.3);color:#f7cd83}
-  #frameNote b{color:#ffd894}
+/* ── tabs (phones) ──────────────────────────────────────────────────────── */
+.tabs{display:none;gap:6px;padding:8px clamp(12px,2.2vw,22px) 0}
+.tabs button{flex:1;border:1px solid var(--line);background:var(--panel);border-radius:var(--r-sm);
+  min-height:var(--tap);font-size:13px;color:var(--muted)}
+.tabs button[aria-selected="true"]{color:var(--text);background:var(--panel-2);border-color:var(--line-2);font-weight:600}
 
-  /* ── chat column ───────────────────────────────────────── */
-  .chatwrap{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line)}
-  #thread{flex:1;overflow-y:auto;padding:20px 18px 8px;scroll-behavior:smooth}
-  .row{display:flex;gap:11px;margin-bottom:18px;align-items:flex-start}
-  .row.me{flex-direction:row-reverse}
-  .av{width:30px;height:30px;border-radius:9px;flex:0 0 30px;display:grid;place-items:center;font-size:15px;
-      background:linear-gradient(135deg,#2a3358,#1d2436);border:1px solid var(--line)}
-  .row.me .av{background:linear-gradient(135deg,#3b4a86,#25305a)}
-  .bub{max-width:min(92%,760px);background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-       padding:13px 15px}
-  .row.me .bub{background:var(--user);border-color:#2f3f6d}
-  .bub p{margin:0 0 9px}
-  .bub p:last-child{margin-bottom:0}
-  .who{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin-bottom:6px}
-  .chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:#c7cfe8;background:#1a2133;
-        border:1px solid var(--line);border-radius:999px;padding:3px 9px;margin:0 6px 6px 0}
-  .chip.ai{border-color:#3a4b8f;color:#bcc7ff}
-  .chip.warn{border-color:#6b5326;color:#f0c577}
-  .chip.ok{border-color:#2c5a48;color:#8fe3c2}
-  .stats{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 4px}
-  .stat{background:#10141f;border:1px solid var(--line);border-radius:11px;padding:7px 11px;min-width:84px}
-  .stat b{display:block;font-size:15px}
-  .stat span{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
-  details{border:1px solid var(--line);border-radius:12px;background:#10141f;margin:9px 0}
-  details>summary{cursor:pointer;padding:9px 12px;font-size:12.5px;color:#c3cbe4;list-style:none}
-  details>summary::-webkit-details-marker{display:none}
-  details>summary:before{content:"▸ ";color:var(--muted)}
-  details[open]>summary:before{content:"▾ "}
-  .dbody{padding:2px 13px 12px;font-size:13px;color:#cfd6e8}
-  .kv{display:grid;grid-template-columns:132px 1fr;gap:4px 10px;font-size:12.7px}
-  .kv div:nth-child(odd){color:var(--muted)}
-  .swatches{display:flex;flex-wrap:wrap;gap:7px;margin:7px 0}
-  .sw{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);
-      background:#0e121c;border:1px solid var(--line);border-radius:8px;padding:3px 7px}
-  .sw i{width:13px;height:13px;border-radius:4px;display:block;border:1px solid #00000055}
-  ul.tight{margin:6px 0 0 16px;padding:0}
-  ul.tight li{margin:3px 0;font-size:12.7px;color:#c8d0e4}
-  .stages{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
-  .stage{font-size:11px;color:var(--muted);background:#0e121c;border:1px solid var(--line);
-         border-radius:8px;padding:3px 8px;font-family:var(--mono)}
-  .stage.done{color:#9fe6c7;border-color:#25493c}
-  .atlas{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
-  .atlas figure{margin:0;width:104px}
-  .atlas img{width:104px;height:104px;object-fit:cover;border-radius:9px;border:1px solid var(--line);
-             background:#0a0d14;image-rendering:pixelated}
-  .atlas figcaption{font-size:10.5px;color:var(--muted);margin-top:3px;text-align:center}
-  .acts{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px;align-items:center}
-  .dl{display:inline-flex;align-items:center;gap:6px;background:#1d2436;
-      border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-size:12.5px;color:#dfe5f7}
-  .dl:hover{border-color:var(--accent);color:#fff}
-  .dl.primary{background:linear-gradient(135deg,#39459c,#2b3576);border-color:#4a58bd;color:#fff;font-weight:600}
-  .dl small{color:var(--muted);font-weight:400}
-  .mini{font-size:11.5px;background:transparent;border:1px dashed var(--line);border-radius:8px;
-        padding:6px 9px;color:var(--muted)}
-  .mini:hover{color:#dfe5f7;border-color:#3a4560}
-  .typing{display:flex;gap:5px;align-items:center;color:var(--muted);font-size:12.5px}
-  .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:b 1.1s infinite}
-  .dot:nth-child(2){animation-delay:.18s}.dot:nth-child(3){animation-delay:.36s}
-  @keyframes b{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
-  .err{color:#ffb3b3;background:rgba(255,80,80,.08);border:1px solid rgba(255,80,80,.3);
-       border-radius:10px;padding:8px 11px;font-size:12.7px}
+/* ── panes ──────────────────────────────────────────────────────────────── */
+main{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr);gap:0;min-height:0}
+.pane{display:flex;flex-direction:column;min-height:0;min-width:0}
+.pane.build{border-right:1px solid var(--line);padding:14px clamp(12px,2.2vw,22px) 0}
+.pane.stage{position:relative;background:linear-gradient(180deg,#0b0e15,#0a0c12)}
 
-  /* ── composer ──────────────────────────────────────────── */
-  .composer{border-top:1px solid var(--line);background:rgba(11,13,20,.9);padding:11px 18px 14px}
-  .sug{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
-  .sug button{font-size:12px;background:#141a29;border:1px solid var(--line);border-radius:999px;
-              padding:5px 11px;color:#c5cde6}
-  .sug button:hover{border-color:var(--accent)}
-  .box{display:flex;gap:9px;align-items:flex-end;background:var(--panel);border:1px solid var(--line);
-       border-radius:var(--radius);padding:9px 10px}
-  .box.over{border-color:var(--accent);background:#1a2036}
-  textarea{flex:1;background:transparent;border:0;color:var(--text);font:inherit;resize:none;outline:none;
-           max-height:132px;min-height:24px}
-  .tool{border:1px solid var(--line);background:#161c2b;border-radius:10px;width:36px;height:36px;
-        display:grid;place-items:center;font-size:15px}
-  .tool:hover{border-color:var(--accent)}
-  .send{background:linear-gradient(135deg,var(--accent),#4d5ad6);border:0;border-radius:10px;
-        width:auto;padding:0 15px;height:36px;font-weight:600;color:#fff}
-  .send:disabled{opacity:.55;cursor:default}
-  .thumb{position:relative;margin-bottom:9px;display:none}
-  .thumb img{height:72px;border-radius:10px;border:1px solid var(--line)}
-  .thumb button{position:absolute;top:-7px;left:64px;background:#232a3d;border:1px solid var(--line);
-                border-radius:50%;width:22px;height:22px;line-height:1}
-  .opts{display:flex;gap:12px;align-items:center;margin-top:9px;font-size:12px;color:var(--muted);flex-wrap:wrap}
-  select{background:#161c2b;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:5px 8px;font:inherit;font-size:12.5px}
-  label.cb{display:flex;gap:6px;align-items:center;cursor:pointer}
+/* ── dropzone ───────────────────────────────────────────────────────────── */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r)}
+.drop{display:grid;grid-template-columns:1fr 132px;gap:10px;margin-bottom:12px}
+.zone{position:relative;border:1.5px dashed var(--line-2);border-radius:var(--r);background:
+  linear-gradient(180deg,rgba(112,129,255,.06),rgba(52,217,164,.03));padding:14px;min-height:112px;
+  display:grid;place-items:center;text-align:center;transition:.18s;cursor:pointer;overflow:hidden}
+.zone:hover{border-color:var(--accent);background:linear-gradient(180deg,rgba(112,129,255,.11),rgba(52,217,164,.05))}
+.zone.over{border-color:var(--accent-2);background:rgba(52,217,164,.09);transform:scale(.995)}
+.zone.has{border-style:solid;border-color:var(--line-2);background:var(--bg-2)}
+.zone .ico{width:26px;height:26px;margin:0 auto 6px;opacity:.72}
+.zone .t{font-size:13px;font-weight:600}
+.zone .h{font-size:11.5px;color:var(--dim);margin-top:3px}
+.zone img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#0a0c12}
+.zone .rm{position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:9px;background:rgba(10,12,18,.82);
+  border:1px solid var(--line-2);display:none;place-items:center;font-size:15px;line-height:1}
+.zone.has .rm{display:grid}
+.zone .name{position:absolute;left:7px;bottom:6px;right:42px;font:11px/1.3 var(--mono);color:var(--muted);
+  background:rgba(10,12,18,.8);border-radius:7px;padding:3px 6px;text-align:left;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:none}
+.zone.has .name{display:block}
 
-  /* ── viewer column ─────────────────────────────────────── */
-  .viewer{position:relative;background:#080a11;min-height:0;display:flex;flex-direction:column}
-  #canvasWrap{flex:1;position:relative;min-height:0}
-  canvas{display:block;width:100%;height:100%}
-  .vtools{position:absolute;top:12px;left:12px;display:flex;gap:6px;flex-wrap:wrap;z-index:3}
-  .tt{font-size:11.5px;background:rgba(20,26,41,.86);border:1px solid var(--line);border-radius:9px;
-      padding:5px 9px;color:#c3cbe4}
-  .tt.on{border-color:var(--accent);color:#fff;background:rgba(60,72,160,.5)}
-  .vhint{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--muted);
-         font-size:13px;padding:24px;pointer-events:none}
-  .vmeta{position:absolute;right:12px;bottom:12px;font-size:11px;color:var(--muted);font-family:var(--mono);
-         background:rgba(10,13,20,.7);border:1px solid var(--line);border-radius:9px;padding:6px 9px;z-index:3;max-width:60%}
-  .vhead{padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:9px;
-         background:rgba(11,13,20,.7);font-size:12.5px;color:var(--muted)}
-  @media (max-width:980px){
-    .app{grid-template-columns:1fr;grid-template-rows:1fr 44vh}
-    .chatwrap{border-right:0;border-bottom:1px solid var(--line)}
-  }
+/* ── controls ───────────────────────────────────────────────────────────── */
+.controls{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px;margin-bottom:12px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;background:var(--bg-2);padding:2px}
+.seg button{border-radius:999px;padding:6px 12px;font-size:12.5px;color:var(--muted);min-height:34px}
+.seg button[aria-pressed="true"]{background:var(--raise);color:var(--text);box-shadow:inset 0 0 0 1px var(--line-2)}
+.field{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+.field select{background:var(--bg-2);border:1px solid var(--line);border-radius:9px;padding:6px 8px;font-size:12.5px;min-height:34px}
+input[type=range]{width:104px;accent-color:var(--accent);height:30px}
+.sw{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none}
+.sw input{appearance:none;width:34px;height:20px;border-radius:999px;background:var(--raise);border:1px solid var(--line-2);
+  position:relative;transition:.18s;cursor:pointer;margin:0}
+.sw input::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--muted);transition:.18s}
+.sw input:checked{background:rgba(112,129,255,.32);border-color:var(--accent)}
+.sw input:checked::after{transform:translateX(14px);background:var(--accent-ink)}
+.hint{font:11.5px/1.45 var(--mono);color:var(--dim);margin-left:auto}
+
+/* ── thread ─────────────────────────────────────────────────────────────── */
+.thread{flex:1;overflow-y:auto;padding:2px 2px 14px;scroll-behavior:smooth;overscroll-behavior:contain}
+.row{display:flex;gap:10px;margin-bottom:14px;align-items:flex-start}
+.row.me{flex-direction:row-reverse}
+.av{width:28px;height:28px;border-radius:9px;flex:0 0 28px;display:grid;place-items:center;background:
+  linear-gradient(140deg,#2b3457,#1d2436);border:1px solid var(--line);font-size:13px}
+.row.me .av{background:linear-gradient(140deg,#3d4c8a,#26305b)}
+.bub{max-width:min(100%,700px);background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;min-width:0}
+.row.me .bub{background:#1e2842;border-color:#2f3b60}
+.bub p{margin-bottom:8px}.bub p:last-child{margin-bottom:0}
+.who{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);margin-bottom:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;background:var(--bg-2);border:1px solid var(--line);
+  border-radius:999px;padding:3px 9px;margin:0 6px 6px 0;color:#c8d0e8}
+.chip.ai{border-color:#3b4a8d;color:var(--accent-ink)}
+.chip.ok{border-color:#2c5a48;color:#8fe3c2}
+.chip.warn{border-color:#6b5326;color:#f0c577}
+.chip.bad{border-color:#6b2b2b;color:#ffb4b4}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:7px;margin:10px 0}
+.stat{background:var(--bg-2);border:1px solid var(--line);border-radius:11px;padding:7px 10px;min-width:0}
+.stat b{display:block;font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.stat span{font-size:10.5px;color:var(--dim);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.dl{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);background:var(--panel-2);
+  border-radius:var(--r-sm);padding:8px 12px;font-size:12.5px;min-height:var(--tap);text-decoration:none;transition:.16s}
+.dl:hover{border-color:var(--accent);text-decoration:none;background:var(--raise)}
+.dl small{color:var(--dim);font-size:10.5px}
+.dl.primary{background:linear-gradient(140deg,rgba(112,129,255,.24),rgba(52,217,164,.16));border-color:#4657a8;color:#e7ebff;font-weight:600}
+.mini{border:1px solid var(--line);background:var(--bg-2);border-radius:999px;padding:5px 11px;font-size:12px;color:var(--muted);
+  min-height:34px;transition:.16s}
+.mini:hover{color:var(--text);border-color:var(--line-2)}
+details{border-top:1px solid var(--line);margin-top:10px;padding-top:8px}
+details summary{cursor:pointer;font-size:12.5px;color:var(--muted);list-style:none;display:flex;align-items:center;gap:7px;min-height:26px}
+details summary::-webkit-details-marker{display:none}
+details summary::before{content:"▸";color:var(--dim);transition:.16s}
+details[open] summary::before{transform:rotate(90deg)}
+.dbody{font-size:12.5px;color:var(--muted);padding-top:9px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px}
+.kv>div:nth-child(odd){color:var(--dim)}
+ul.tight{margin:4px 0 0;padding-left:18px}
+ul.tight li{margin-bottom:3px}
+.stages{display:flex;flex-direction:column;gap:4px}
+.stage{display:flex;justify-content:space-between;gap:10px;font:11.5px/1.5 var(--mono);color:var(--dim);
+  border:1px solid var(--line);border-radius:8px;padding:4px 8px;background:var(--bg-2)}
+.stage b{color:var(--muted);font-weight:500}
+.atlas{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.atlas figure{margin:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg-2)}
+.atlas img{display:block;width:100%;aspect-ratio:1;object-fit:cover}
+.atlas figcaption{font-size:10.5px;color:var(--dim);padding:5px 7px;text-transform:uppercase;letter-spacing:.07em}
+.err{border:1px solid #5d2b32;background:rgba(255,122,122,.08);color:#ffbcbc;border-radius:11px;padding:10px 12px;font-size:13px}
+.err .acts{margin-top:9px}
+.typing{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted)}
+.typing i{width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:b 1.1s infinite}
+.typing i:nth-child(2){animation-delay:.16s}.typing i:nth-child(3){animation-delay:.32s}
+@keyframes b{0%,60%,100%{opacity:.25}30%{opacity:1}}
+.bar{height:3px;border-radius:3px;background:var(--raise);overflow:hidden;margin-top:9px}
+.bar>i{display:block;height:100%;width:12%;background:linear-gradient(90deg,var(--accent),var(--accent-2));
+  transition:width .5s ease;border-radius:3px}
+
+/* ── composer ──────────────────────────────────────────────────────────── */
+.composer{border-top:1px solid var(--line);padding:10px 0 12px;background:linear-gradient(180deg,transparent,var(--bg) 42%)}
+.sug{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none}
+.sug::-webkit-scrollbar{display:none}
+.sug button{white-space:nowrap;border:1px solid var(--line);background:var(--bg-2);border-radius:999px;
+  padding:6px 11px;font-size:12px;color:var(--muted);min-height:34px}
+.sug button:hover{border-color:var(--accent);color:var(--text)}
+.box{display:flex;gap:8px;align-items:flex-end;border:1px solid var(--line-2);background:var(--panel);
+  border-radius:var(--r-lg);padding:8px}
+.box.over{border-color:var(--accent-2)}
+.box textarea{flex:1;border:none;background:none;resize:none;padding:8px 4px;max-height:132px;font-size:14.5px;outline:none}
+.box textarea::placeholder{color:var(--dim)}
+.send{background:linear-gradient(140deg,var(--accent),#5566e8);border-radius:var(--r-sm);padding:0 18px;min-height:40px;
+  font-weight:600;font-size:13.5px;color:#fff;box-shadow:0 4px 16px rgba(112,129,255,.3);transition:.16s}
+.send[disabled]{opacity:.5;cursor:progress;box-shadow:none}
+.send:hover:not([disabled]){transform:translateY(-1px)}
+
+/* ── viewer ─────────────────────────────────────────────────────────────── */
+.vhead{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);min-height:46px}
+.vhead h2{font-size:12.5px;font-weight:600;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tt{border:1px solid var(--line);background:var(--bg-2);border-radius:8px;padding:5px 9px;font-size:11.5px;color:var(--muted);min-height:32px}
+.tt[aria-pressed="true"]{border-color:var(--accent);color:var(--accent-ink);background:rgba(112,129,255,.12)}
+.canvas{position:relative;flex:1;min-height:0;touch-action:none}
+.canvas canvas{display:block;width:100%!important;height:100%!important}
+.vtools{position:absolute;left:12px;bottom:12px;display:flex;gap:6px;flex-wrap:wrap;z-index:3}
+.vmeta{position:absolute;right:12px;top:12px;z-index:3;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:70%}
+.empty{position:absolute;inset:0;display:grid;place-items:center;}
+.empty.gone{display:nonetext-align:center;padding:26px;z-index:2;
+  background:radial-gradient(420px 300px at 50% 42%,rgba(112,129,255,.09),transparent 70%)}
+.empty svg{width:74px;height:74px;opacity:.5;margin-bottom:12px}
+.empty h3{font-size:15px;margin-bottom:6px}
+.empty p{font-size:12.5px;color:var(--dim);max-width:340px;margin:0 auto}
+.overlay{position:absolute;inset:0;z-index:4;display:none;place-items:center;background:rgba(10,12,18,.72);backdrop-filter:blur(3px)}
+.overlay.on{display:grid}
+.prog{width:min(330px,86%);border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel);padding:15px 16px}
+.prog h4{font-size:13px;margin:0 0 3px}
+.prog .h{font-size:11.5px;color:var(--dim);margin-bottom:11px}
+.step{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);padding:3px 0}
+.step i{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--line-2);flex:0 0 14px}
+.step.now{color:var(--text)}.step.now i{border-color:var(--accent);border-top-color:transparent;animation:spin .8s linear infinite}
+.step.done i{background:var(--accent-2);border-color:var(--accent-2)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── gallery drawer ─────────────────────────────────────────────────────── */
+.drawer{position:fixed;inset:0;z-index:30;display:none}
+.drawer.on{display:block}
+.scrim{position:absolute;inset:0;background:rgba(6,8,12,.68)}
+.sheet{position:absolute;top:0;right:0;bottom:0;width:min(420px,92vw);background:var(--bg-2);border-left:1px solid var(--line);
+  display:flex;flex-direction:column;animation:slide .22s ease}
+@keyframes slide{from{transform:translateX(24px);opacity:.4}}
+.sheet header{border-bottom:1px solid var(--line)}
+.sheet .body{overflow-y:auto;padding:12px;display:grid;gap:8px;align-content:start}
+.item{display:grid;grid-template-columns:52px 1fr;gap:10px;align-items:center;border:1px solid var(--line);
+  background:var(--panel);border-radius:var(--r);padding:9px;text-align:left;width:100%}
+.item:hover{border-color:var(--line-2);background:var(--panel-2)}
+.item .g{width:52px;height:52px;border-radius:10px;background:linear-gradient(140deg,#1c2337,#141926);
+  border:1px solid var(--line);display:grid;place-items:center;font-size:19px}
+.item .t{font-size:12.5px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.item .s{font:11px/1.4 var(--mono);color:var(--dim);margin-top:2px}
+
+/* ── responsive ─────────────────────────────────────────────────────────── */
+@media (max-width:1080px){
+  main{grid-template-columns:minmax(0,1fr) minmax(0,.86fr)}
+  .drop{grid-template-columns:1fr 108px}
+}
+@media (max-width:900px){
+  body{overflow:auto}
+  .shell{height:auto;min-height:100dvh;grid-template-rows:auto auto auto}
+  main{grid-template-columns:1fr}
+  .tabs{display:flex}
+  .pane{display:none}
+  .pane[data-pane="build"].on,.pane[data-pane="stage"].on{display:flex}
+  .pane.build{border-right:none;padding-bottom:0}
+  .pane.stage{border-top:1px solid var(--line);position:sticky;top:0;height:min(74dvh,560px)}
+  .thread{max-height:none;min-height:38vh}
+  .hint{margin-left:0;flex-basis:100%}
+}
+@media (max-width:700px){.hide-sm{display:none}}
+@media (max-width:560px){
+  .brand .sub{display:none}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .drop{grid-template-columns:1fr}
+  .zone.back{min-height:74px}
+  .vhead{flex-wrap:wrap}
+}
 </style>
 </head>
 <body>
-<div class="app">
-  <div class="chatwrap">
-    <header>
-      <div class="logo">⚒</div>
-      <div>
+<div class="shell">
+
+  <header>
+    <div class="brand">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#0a0c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5"/><path d="M12 12v10"/>
+        </svg>
+      </span>
+      <div style="min-width:0">
         <h1>Character Forge</h1>
-        <div class="sub">concept → AI build plan → game-ready mesh, textures &amp; exports</div>
+        <div class="sub">any image or a sentence → a game-ready 3D model, right here</div>
       </div>
-      <div class="spacer"></div>
-      <button class="hbtn" id="recentBtn">Recent</button>
-      <button class="hbtn" id="newBtn">New chat</button>
-    </header>
-    <div id="frameNote" style="display:none">
-      <span>⚠</span>
-      <div>You are viewing this inside an embedded frame, which blocks file downloads. <b>Open in a new tab</b> to save the GLB, or use “copy link” on any download button.</div>
-      <div class="spacer"></div>
-      <button class="hbtn" id="openTab">Open in new tab ↗</button>
     </div>
+    <span class="spacer"></span>
+    <span class="pill" id="statusPill" role="status" aria-live="polite"><i class="dot"></i>checking…</span>
+    <button class="hbtn" id="galleryBtn">🖼 <span class="hide-sm">Gallery</span></button>
+    <button class="hbtn ghost" id="newBtn" title="Start a fresh build">＋ <span class="hide-sm">New</span></button>
+  </header>
 
-    <div id="thread"></div>
+  <nav class="tabs" role="tablist" aria-label="Panel">
+    <button role="tab" id="tabBuild" aria-selected="true" aria-controls="paneBuild">Build</button>
+    <button role="tab" id="tabStage" aria-selected="false" aria-controls="paneStage">3D model</button>
+  </nav>
 
-    <div class="composer">
-      <div class="sug" id="sug"></div>
-      <div class="thumb" id="thumb"><img id="thumbImg" alt=""><button id="thumbX" title="remove">×</button></div>
-      <div class="box" id="box">
-        <button class="tool" id="attach" title="Attach a concept image">🖼</button>
-        <textarea id="msg" rows="1" placeholder="Describe a character… or say “make the cape red”, “add wings”, “keep it under 3000 tris”"></textarea>
-        <button class="send" id="send">Send</button>
+  <main>
+    <!-- ── left: the forge ─────────────────────────────────────────────── -->
+    <section class="pane build on" id="paneBuild" role="tabpanel" aria-labelledby="tabBuild">
+
+      <div class="drop">
+        <div class="zone" id="zoneFront" tabindex="0" role="button"
+             aria-label="Attach a front view: click, drag a file here, or paste from the clipboard">
+          <div>
+            <div class="ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                <path d="M12 16V4m0 0L8 8m4-4 4 4"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
+              </svg>
+            </div>
+            <div class="t">Drop the image you want in 3D</div>
+            <div class="h">PNG with a transparent background works best · JPG, WEBP and screenshots too · paste with ⌘V / Ctrl+V</div>
+          </div>
+          <img id="thumbFront" alt="" hidden>
+          <div class="name" id="nameFront"></div>
+          <button class="rm" id="rmFront" title="Remove image" aria-label="Remove image">×</button>
+        </div>
+        <div class="zone back" id="zoneBack" tabindex="0" role="button" aria-label="Optional back view">
+          <div>
+            <div class="t">Back view</div>
+            <div class="h">optional — measures the rear silhouette</div>
+          </div>
+          <img id="thumbBack" alt="" hidden>
+          <div class="name" id="nameBack"></div>
+          <button class="rm" id="rmBack" title="Remove back view" aria-label="Remove back view">×</button>
+        </div>
       </div>
-      <div class="opts">
-        <label class="cb"><input type="checkbox" id="useAi" checked> AI director</label>
-        <span id="aiState">…</span>
-        <div class="spacer" style="flex:1"></div>
-        <label>poly budget
-          <select id="budget">
-            <option value="auto" selected>let the AI decide</option>
-            <option value="mobile">mobile · ≤1.5k tris</option>
-            <option value="game">game · ≤5k tris</option>
-            <option value="high">high detail · ≤15k tris</option>
+      <input type="file" id="fileFront" accept="image/*" hidden>
+      <input type="file" id="fileBack" accept="image/*" hidden>
+
+      <div class="card controls">
+        <div class="seg" role="group" aria-label="Build mode">
+          <button data-mode="auto" aria-pressed="true">Auto</button>
+          <button data-mode="character" aria-pressed="false">Character</button>
+          <button data-mode="sculpt" aria-pressed="false">Sculpt</button>
+        </div>
+        <label class="sw"><input type="checkbox" id="relief"> Flat back (relief)</label>
+        <label class="field">Depth <input type="range" id="depth" min="25" max="160" value="100" step="5"
+               aria-label="How deep the reconstruction is"><span id="depthVal" style="font:11.5px var(--mono);color:var(--muted)">100%</span></label>
+        <label class="field">Budget
+          <select id="budget" aria-label="Polygon budget">
+            <option value="auto">Auto</option><option value="mobile">Mobile ~1.5k</option>
+            <option value="game">Game ~5k</option><option value="high">Hero ~15k</option>
           </select>
         </label>
+        <label class="sw"><input type="checkbox" id="useAi" checked> AI director</label>
+        <span class="hint" id="modeHint">Auto: a standing figure gets the rig, anything else gets sculpted from its silhouette</span>
       </div>
-      <input type="file" id="file" accept="image/*" hidden>
-    </div>
-  </div>
 
-  <div class="viewer">
-    <div class="vhead"><span id="vTitle">Viewer — nothing built yet</span></div>
-    <div id="canvasWrap">
-      <div class="vtools">
-        <button class="tt on" data-view="anime">Anime</button>
-        <button class="tt" data-view="lit">Material</button>
-        <button class="tt" data-view="wire">Wireframe</button>
-        <button class="tt" data-view="normal">Normals</button>
-        <button class="tt" data-view="uv">UVs</button>
-        <button class="tt on" id="spin">Auto-spin</button>
+      <div class="thread" id="thread"></div>
+
+      <div class="composer">
+        <div class="sug" id="sug"></div>
+        <form class="box" id="box">
+          <textarea id="msg" rows="1" placeholder="Describe a character, or say “make it a flat back”, “more volume”, “under 2000 tris”…"></textarea>
+          <button class="send" id="send" type="submit">Forge</button>
+        </form>
       </div>
-      <div class="vhint" id="vhint">Send a description or drop a concept image →<br>the AI plans the character, the engine builds it.</div>
-      <div class="vmeta" id="vmeta"></div>
-    </div>
+    </section>
+
+    <!-- ── right: the 3D stage ─────────────────────────────────────────── -->
+    <section class="pane stage on" id="paneStage" role="tabpanel" aria-labelledby="tabStage">
+      <div class="vhead">
+        <h2 id="vTitle">3D stage</h2>
+        <span class="spacer"></span>
+        <div class="seg" role="group" aria-label="Shading">
+          <button class="tt" data-view="material" aria-pressed="true">Material</button>
+          <button class="tt" data-view="anime" aria-pressed="false">Anime</button>
+          <button class="tt" data-view="wire" aria-pressed="false">Wire</button>
+          <button class="tt" data-view="normal" aria-pressed="false">Normals</button>
+          <button class="tt" data-view="uv" aria-pressed="false">UV</button>
+        </div>
+      </div>
+      <div class="canvas" id="canvasWrap">
+        <div class="empty" id="empty">
+          <div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#7d8bb5" stroke-width="1.2" stroke-linejoin="round">
+              <path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/>
+            </svg>
+            <h3>Nothing forged yet</h3>
+            <p>Drop an image or describe a character. The model lands here — orbit with a drag, zoom with the wheel or a pinch.</p>
+          </div>
+        </div>
+        <div class="vmeta" id="vmeta"></div>
+        <div class="vtools">
+          <button class="tt" id="spin" aria-pressed="true">↻ Turntable</button>
+          <button class="tt" id="resetView">⌖ Reset</button>
+          <button class="tt" id="shot">📷 PNG</button>
+          <button class="tt" id="fs">⛶ Full</button>
+        </div>
+        <div class="overlay" id="overlay" aria-live="polite">
+          <div class="prog">
+            <h4 id="progTitle">Forging…</h4>
+            <div class="h" id="progSub">reading your input</div>
+            <div id="steps"></div>
+            <div class="bar"><i id="bar"></i></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Recent builds">
+  <div class="scrim" data-close></div>
+  <div class="sheet">
+    <header>
+      <b style="font-size:14px">Recent builds</b><span class="spacer"></span>
+      <button class="hbtn ghost" data-close aria-label="Close gallery">✕ Close</button>
+    </header>
+    <div class="body" id="gallery"><p class="muted" style="padding:8px">Loading…</p></div>
   </div>
 </div>
 
@@ -219,87 +413,87 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
-/* ───────── viewer ───────── */
-const wrap = document.getElementById('canvasWrap');
-const renderer = new THREE.WebGLRenderer({antialias:true, alpha:false});
+/* ── tiny helpers ─────────────────────────────────────────────────────── */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const nf = n => (n ?? 0).toLocaleString();
+const store = {
+  get(k, d){ try { const v = localStorage.getItem('cf_' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v){ try { localStorage.setItem('cf_' + k, JSON.stringify(v)); } catch {} }
+};
+const reduced = matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+/* ── viewer ───────────────────────────────────────────────────────────── */
+const wrap = $('#canvasWrap');
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, preserveDrawingBuffer:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.domElement.style.cssText = 'width:100%;height:100%';
 wrap.appendChild(renderer.domElement);
-renderer.domElement.style.width = '100%';
-renderer.domElement.style.height = '100%';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0d14);
-scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.06).texture;
-
-const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 100);
-camera.position.set(1.6, 1.5, 2.6);
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.05).texture;
+const camera = new THREE.PerspectiveCamera(38, 1, 0.02, 100);
+camera.position.set(1.6, 1.4, 2.6);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.dampingFactor = 0.08;
-controls.minDistance = 0.5; controls.maxDistance = 12;
+controls.minDistance = 0.35; controls.maxDistance = 14;
+controls.maxPolarAngle = Math.PI * 0.96;
 controls.target.set(0, 0.85, 0);
 
-const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(2.4, 4, 3); scene.add(key);
-const rim = new THREE.DirectionalLight(0x9fb4ff, 1.2); rim.position.set(-3, 2, -2.4); scene.add(rim);
-scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x1a1d26, 0.7));
-const grid = new THREE.GridHelper(6, 24, 0x2b3448, 0x232a3a); scene.add(grid);
-const loader = new GLTFLoader();
-let model = null, view = 'anime', spin = true;
-const uvTex = makeUVChecker();
+const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(2.6, 4.2, 3.2); scene.add(key);
+const rim = new THREE.DirectionalLight(0x9fb4ff, 1.15); rim.position.set(-3.2, 2.2, -2.6); scene.add(rim);
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x171b24, 0.66));
+const grid = new THREE.GridHelper(6, 24, 0x2b3448, 0x222838);
+grid.material.transparent = true; grid.material.opacity = .55; scene.add(grid);
 
-/* ── anime (cel) shading: toon bands + inverted-hull line art ── */
-const gradMap = (() => {
-  const data = new Uint8Array([90, 90, 90, 255, 165, 165, 165, 255, 225, 225, 225, 255, 255, 255, 255, 255]);
-  const t = new THREE.DataTexture(data, 4, 1);
-  t.needsUpdate = true; t.minFilter = THREE.NearestFilter; t.magFilter = THREE.NearestFilter;
-  return t;
-})();
-function toonFor(orig){
-  const m = new THREE.MeshToonMaterial({ gradientMap: gradMap, shininess: 14 });
-  if (orig.map) m.map = orig.map;
-  if (orig.normalMap){
-    m.normalMap = orig.normalMap;
-    m.normalScale = orig.normalScale ? orig.normalScale.clone() : new THREE.Vector2(0.6, 0.6);
-  }
-  if (orig.alphaMap) m.alphaMap = orig.alphaMap;
-  return m;
-}
-function lineShell(geom, thickness){
-  const mat = new THREE.ShaderMaterial({
-    side: THREE.BackSide,
-    uniforms: { uT: { value: thickness } },
-    vertexShader: 'uniform float uT;\nvoid main(){ vec3 p = position + normal * uT; gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }',
-    fragmentShader: 'void main(){ gl_FragColor = vec4(0.035, 0.04, 0.065, 1.0); }'
-  });
-  const m = new THREE.Mesh(geom, mat);
-  m.userData.isLine = true;
-  return m;
-}
-let contactShadow = null;
-function addContactShadow(size){
-  if (contactShadow){ scene.remove(contactShadow); contactShadow = null; }
-  const c = document.createElement('canvas'); c.width = c.height = 256;
-  const g = c.getContext('2d');
-  const gr = g.createRadialGradient(128, 128, 12, 128, 128, 126);
-  gr.addColorStop(0, 'rgba(0,0,0,.62)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
-  const m = new THREE.Mesh(
-    new THREE.PlaneGeometry(size * 2.4, size * 2.4),
-    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
-  m.rotation.x = -Math.PI / 2; m.position.y = 0.003;
-  scene.add(m); contactShadow = m;
-}
+const loader = new GLTFLoader();
+let model = null, view = 'material', spin = !reduced;
+$('#spin').setAttribute('aria-pressed', String(spin));
+const uvTex = makeUVChecker();
 
 function makeUVChecker(){
   const c = document.createElement('canvas'); c.width = c.height = 512;
   const g = c.getContext('2d');
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++){
-    g.fillStyle = (x + y) % 2 ? '#6f7cff' : '#2b2f45'; g.fillRect(x*64, y*64, 64, 64);
+    g.fillStyle = (x + y) % 2 ? '#7081ff' : '#262c40'; g.fillRect(x * 64, y * 64, 64, 64);
   }
   g.fillStyle = '#fff'; g.font = 'bold 20px monospace';
-  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) g.fillText(`${x},${y}`, x*64+6, y*64+26);
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) g.fillText(`${x},${y}`, x * 64 + 6, y * 64 + 26);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; return t;
+}
+const gradMap = (() => {
+  const d = new Uint8Array([92,92,92,255, 168,168,168,255, 226,226,226,255, 255,255,255,255]);
+  const t = new THREE.DataTexture(d, 4, 1);
+  t.needsUpdate = true; t.minFilter = t.magFilter = THREE.NearestFilter; return t;
+})();
+function toonFor(orig){
+  const m = new THREE.MeshToonMaterial({ gradientMap:gradMap, shininess:14 });
+  if (orig.map) m.map = orig.map;
+  if (orig.normalMap){ m.normalMap = orig.normalMap;
+    m.normalScale = orig.normalScale ? orig.normalScale.clone() : new THREE.Vector2(.6, .6); }
+  return m;
+}
+function lineShell(geom, t){
+  const mat = new THREE.ShaderMaterial({ side:THREE.BackSide, uniforms:{ uT:{ value:t } },
+    vertexShader:'uniform float uT;void main(){vec3 p=position+normal*uT;gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0);}',
+    fragmentShader:'void main(){gl_FragColor=vec4(0.03,0.037,0.06,1.0);}' });
+  const m = new THREE.Mesh(geom, mat); m.userData.isLine = true; return m;
+}
+let shadow = null;
+function addContactShadow(size){
+  if (shadow){ scene.remove(shadow); shadow = null; }
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(128, 128, 12, 128, 128, 126);
+  gr.addColorStop(0, 'rgba(0,0,0,.6)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+  shadow = new THREE.Mesh(new THREE.PlaneGeometry(size * 2.5, size * 2.5),
+    new THREE.MeshBasicMaterial({ map:new THREE.CanvasTexture(c), transparent:true, depthWrite:false }));
+  shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.002; scene.add(shadow);
 }
 function applyView(){
   if (!model) return;
@@ -308,306 +502,478 @@ function applyView(){
     if (!o.isMesh || o.userData.isLine) return;
     if (!o.userData.orig) o.userData.orig = o.material;
     const orig = o.userData.orig;
-    (o.userData.lineChildren || []).forEach(ch => { if (ch.parent) ch.parent.remove(ch); });
-    o.userData.lineChildren = [];
-    if (view === 'anime') {
+    (o.userData.lines || []).forEach(ch => ch.parent && ch.parent.remove(ch));
+    o.userData.lines = [];
+    o.visible = true;
+    if (view === 'anime'){
       o.material = toonFor(orig);
-      const shell = lineShell(o.geometry, th);
-      o.add(shell); o.userData.lineChildren = [shell];
-    }
-    else if (view === 'lit') { o.material = orig; o.visible = true; }
-    else if (view === 'wire') o.material = new THREE.MeshBasicMaterial({color:0x8fa3ff, wireframe:true});
+      const shell = lineShell(o.geometry, th); o.add(shell); o.userData.lines = [shell];
+    } else if (view === 'material') o.material = orig;
+    else if (view === 'wire') o.material = new THREE.MeshBasicMaterial({ color:0x93a4ff, wireframe:true });
     else if (view === 'normal') o.material = new THREE.MeshNormalMaterial();
-    else o.material = new THREE.MeshStandardMaterial({map: uvTex, roughness:.75});
+    else o.material = new THREE.MeshStandardMaterial({ map:uvTex, roughness:.75 });
+    if (orig.vertexColors && view !== 'uv') o.material.vertexColors = true;
   });
 }
-async function loadModel(url, title){
-  if (model){ scene.remove(model); model = null; }
-  try{
+async function loadModel(url, title, meta){
+  showStage();
+  $('#vTitle').textContent = title || '3D stage';
+  try {
     const gltf = await loader.loadAsync(url);
+    if (model) scene.remove(model);
     model = gltf.scene;
-    model.traverse(o => { if (o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+    model.traverse(o => { if (o.isMesh){ o.castShadow = o.receiveShadow = true; } });
     const box = new THREE.Box3().setFromObject(model);
     const size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
     model.position.x -= ctr.x; model.position.z -= ctr.z; model.position.y -= box.min.y;
     model.userData.sizeY = size.y;
-    addContactShadow(Math.max(size.x, size.z) * 0.85);
+    addContactShadow(Math.max(size.x, size.z) * .9);
     scene.add(model); applyView();
-    // fit the whole character in frame whatever the aspect ratio
-    const ctr2 = new THREE.Vector3(0, size.y*0.5, 0);
-    controls.target.copy(ctr2);
-    const dist = (size.y*1.16) / (2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)));
-    const dir = new THREE.Vector3(0.55, 0.28, 1).normalize();
-    camera.position.copy(ctr2).addScaledVector(dir, Math.max(dist, 0.9));
+    const c2 = new THREE.Vector3(0, size.y * .5, 0);
+    controls.target.copy(c2);
+    const dist = (size.y * 1.18) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+    const dir = new THREE.Vector3(.55, .26, 1).normalize();
+    camera.position.copy(c2).addScaledVector(dir, Math.max(dist, .8));
     controls.update();
-    document.getElementById('vhint').style.display = 'none';
-    document.getElementById('vTitle').textContent = title || 'Viewer';
-    document.getElementById('vmeta').textContent = `height ${size.y.toFixed(2)} m`;
-  }catch(e){
-    document.getElementById('vmeta').textContent = 'preview failed: ' + e.message;
+    $('#empty').classList.add('gone');
+    $('#vmeta').innerHTML = (meta || []).map(m => `<span class="chip">${esc(m)}</span>`).join('');
+  } catch (e){
+    $('#vmeta').innerHTML = `<span class="chip bad">preview unavailable: ${esc(String(e.message || e).slice(0,60))}</span>`;
   }
 }
-document.querySelectorAll('.tt[data-view]').forEach(b => b.onclick = () => {
-  document.querySelectorAll('.tt[data-view]').forEach(x => x.classList.remove('on'));
-  b.classList.add('on'); view = b.dataset.view; applyView();
-});
-document.getElementById('spin').onclick = e => { spin = !spin; e.target.classList.toggle('on', spin); };
-
 function resize(){
   const w = wrap.clientWidth, h = wrap.clientHeight;
-  renderer.setSize(w, h, false); camera.aspect = w / Math.max(h,1); camera.updateProjectionMatrix();
+  if (!w || !h) return;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
 }
-new ResizeObserver(resize).observe(wrap); resize();
-renderer.setAnimationLoop(() => {
-  if (model && spin) model.rotation.y += 0.006;
-  controls.update(); renderer.render(scene, camera);
-});
+new ResizeObserver(resize).observe(wrap);
+addEventListener('resize', resize);
+renderer.setAnimationLoop(() => { if (model && spin) model.rotation.y += .0062; controls.update(); renderer.render(scene, camera); });
 
-/* ───────── chat ───────── */
-const thread = document.getElementById('thread'), msgEl = document.getElementById('msg');
-const sendBtn = document.getElementById('send'), fileEl = document.getElementById('file');
-const boxEl = document.getElementById('box'), thumb = document.getElementById('thumb');
-const thumbImg = document.getElementById('thumbImg');
-let imageFile = null, busy = false, session = localStorage.getItem('cf_session') || '';
-
-const SUGGESTIONS = [
-  'A chibi mage with a purple robe, a wizard hat and a staff',
-  'Tall elf ranger in a green hood and cape with a bow',
-  'Heavy orc warrior with silver armor, a big sword and a shield',
-  'Cute robot janitor, teal chassis, glowing yellow eyes, 2500 tris',
-];
-document.getElementById('sug').innerHTML =
-  SUGGESTIONS.map(s => `<button>${s}</button>`).join('');
-document.querySelectorAll('#sug button').forEach(b => b.onclick = () => {
-  msgEl.value = b.textContent; autosize(); msgEl.focus();
+$$('.seg [data-view]').forEach(b => b.onclick = () => {
+  $$('.seg [data-view]').forEach(x => x.setAttribute('aria-pressed', 'false'));
+  b.setAttribute('aria-pressed', 'true'); view = b.dataset.view; applyView();
 });
-const QUICK = ['make it chibi', 'add a cape', 'add wings', 'make the robe red',
-               'keep it under 2000 tris', 'high detail', 'taller'];
-function quickChips(mid){
-  return QUICK.map(q => `<button class="mini" data-quick="${q}">${q}</button>`).join('');
-}
-document.addEventListener('click', e => {
-  const b = e.target.closest('[data-quick]');
-  if (b){ msgEl.value = b.dataset.quick; send(); }
-  const c = e.target.closest('[data-copy]');
-  if (c){
-    const url = new URL(c.dataset.copy, location.origin).href;
-    navigator.clipboard?.writeText(url).then(
-      () => { c.textContent = 'link copied ✓'; setTimeout(() => c.textContent = 'copy link', 1600); },
-      () => { msgEl.value = url; });
+$('#spin').onclick = e => { spin = !spin; e.currentTarget.setAttribute('aria-pressed', String(spin)); };
+$('#resetView').onclick = () => {
+  if (!model) return;
+  model.rotation.y = 0;
+  const s = model.userData.sizeY || 1.7;
+  controls.target.set(0, s * .5, 0);
+  camera.position.set(s * .95, s * .62, s * 1.55); controls.update();
+};
+$('#shot').onclick = () => {
+  renderer.render(scene, camera);
+  const a = document.createElement('a');
+  a.href = renderer.domElement.toDataURL('image/png');
+  a.download = `character-forge-${Date.now()}.png`; a.click();
+};
+$('#fs').onclick = () => { const el = $('#paneStage');
+  document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen?.(); };
+
+/* ── tabs (small screens) ─────────────────────────────────────────────── */
+function showStage(){
+  if (matchMedia('(max-width:900px)').matches){
+    $('#tabBuild').setAttribute('aria-selected', 'false');
+    $('#tabStage').setAttribute('aria-selected', 'true');
+    $('#paneBuild').classList.remove('on'); $('#paneStage').classList.add('on');
+    setTimeout(resize, 60);
   }
-});
+}
+$('#tabBuild').onclick = () => setTab('build');
+$('#tabStage').onclick = () => setTab('stage');
+function setTab(which){
+  const stage = which === 'stage';
+  $('#tabBuild').setAttribute('aria-selected', String(!stage));
+  $('#tabStage').setAttribute('aria-selected', String(stage));
+  $('#paneBuild').classList.toggle('on', !stage); $('#paneStage').classList.toggle('on', stage);
+  setTimeout(resize, 60);
+}
 
-function esc(s){ return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-function autosize(){ msgEl.style.height = 'auto'; msgEl.style.height = Math.min(msgEl.scrollHeight, 132) + 'px'; }
-msgEl.addEventListener('input', autosize);
-msgEl.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); }
-});
-document.getElementById('attach').onclick = () => fileEl.click();
-fileEl.onchange = () => fileEl.files[0] && setImage(fileEl.files[0]);
-document.getElementById('thumbX').onclick = () => { imageFile = null; thumb.style.display = 'none'; fileEl.value = ''; };
-['dragenter','dragover'].forEach(ev => boxEl.addEventListener(ev, e => { e.preventDefault(); boxEl.classList.add('over'); }));
-['dragleave','drop'].forEach(ev => boxEl.addEventListener(ev, e => { e.preventDefault(); boxEl.classList.remove('over'); }));
-boxEl.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f && f.type.startsWith('image/')) setImage(f); });
+/* ── progress overlay ─────────────────────────────────────────────────── */
+const STEPS = ['Isolating the subject', 'Reading depth + proportions', 'Reconstructing geometry',
+               'Optimising topology', 'UVs + PBR bake', 'GLB / OBJ / STL'];
+let progTimer = null, progStart = 0;
+function progBegin(){
+  progStart = performance.now();
+  $('#steps').innerHTML = STEPS.map((s, i) => `<div class="step" data-s="${i}"><i></i>${s}</div>`).join('');
+  $('#overlay').classList.add('on');
+  tick(0, 'reading your input…');
+  clearInterval(progTimer);
+  progTimer = setInterval(() => {
+    const el = (performance.now() - progStart) / 1000;
+    const i = Math.min(STEPS.length - 1, Math.floor(el / 4.2));
+    tick(i, el > 40 ? `still going — a cold free instance takes ~50 s to wake up` : `~${el.toFixed(0)} s`);
+  }, 1400);
+}
+function tick(i, sub){
+  $$('#steps .step').forEach(el => {
+    const n = +el.dataset.s;
+    el.classList.toggle('done', n < i); el.classList.toggle('now', n === i);
+  });
+  $('#bar').style.width = `${Math.min(96, 8 + i * (88 / STEPS.length))}%`;
+  if (sub) $('#progSub').textContent = sub;
+}
+function progEnd(){ clearInterval(progTimer); $('#overlay').classList.remove('on'); }
+
+/* ── status pill ──────────────────────────────────────────────────────── */
+let health = {};
+async function pollHealth(){
+  const pill = $('#statusPill');
+  try {
+    const r = await fetch('/health', { cache:'no-store' });
+    health = await r.json();
+    const m = health.memory || {};
+    const cls = health.ok ? (m.headroom_mb < 90 ? 'warn' : 'ok') : 'warn';
+    pill.innerHTML = `<i class="dot ${cls}"></i>${health.ai ? 'AI <b>' + esc((health.ai_model || '').split('/')[1] || 'on') + '</b>' : 'rule planner'}
+      · atlas <b>${m.atlas_px || '—'}²</b> · free <b>${nf(m.headroom_mb)} MB</b>`;
+    if (!health.ai){ $('#useAi').checked = false; $('#useAi').disabled = true; }
+  } catch (e){
+    pill.innerHTML = `<i class="dot warn"></i>instance asleep — first build wakes it`;
+  }
+}
+pollHealth();
+
+/* ── inputs: image, paste, drag ───────────────────────────────────────── */
+let imgFront = null, imgBack = null, busy = false;
+function setZone(which, f){
+  const front = which === 'front';
+  const zone = front ? $('#zoneFront') : $('#zoneBack');
+  const thumb = front ? $('#thumbFront') : $('#thumbBack');
+  const nameEl = front ? $('#nameFront') : $('#nameBack');
+  const file = front ? $('#fileFront') : $('#fileBack');
+  if (front) imgFront = f; else imgBack = f;
+  if (f){
+    if (!f.type.startsWith('image/')){ say('That file is not an image.'); return; }
+    if (f.size > 16 * 1024 * 1024){ say('Keep the image under 16 MB — a screenshot is plenty.'); return; }
+    thumb.src = URL.createObjectURL(f); thumb.hidden = false; zone.classList.add('has');
+    const probe = new Image();
+    probe.onload = () => { nameEl.textContent =
+      `${f.name || 'pasted'} · ${probe.naturalWidth}×${probe.naturalHeight} · ${(f.size / 1024).toFixed(0)} KB`; };
+    probe.src = thumb.src;
+  } else {
+    thumb.hidden = true; thumb.removeAttribute('src'); thumb.src = '';
+    zone.classList.remove('has'); nameEl.textContent = '';
+  }
+  file.value = '';
+  syncModeHint();
+}
+function bindZone(zoneSel, fileSel, rmSel, which){
+  const zone = $(zoneSel);
+  zone.onclick = e => { if (!e.target.closest('.rm')) $(fileSel).click(); };
+  zone.onkeydown = e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); $(fileSel).click(); } };
+  $(fileSel).onchange = e => e.target.files[0] && setZone(which, e.target.files[0]);
+  $(rmSel).onclick = e => { e.stopPropagation(); setZone(which, null); };
+  ['dragenter','dragover'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add('over'); }));
+  ['dragleave','drop'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.remove('over'); }));
+  zone.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) setZone(which, f); });
+}
+bindZone('#zoneFront', '#fileFront', '#rmFront', 'front');
+bindZone('#zoneBack', '#fileBack', '#rmBack', 'back');
 document.addEventListener('paste', e => {
   const it = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
-  if (it) setImage(it.getAsFile());
+  if (it && !busy){ setZone('front', it.getAsFile()); showStage(); }
 });
-function setImage(f){ imageFile = f; thumbImg.src = URL.createObjectURL(f); thumb.style.display = 'block'; }
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', e => {
+  if (e.target.closest('.zone')) return;                 // the zone handles its own drop
+  e.preventDefault();
+  const f = e.dataTransfer?.files?.[0];
+  if (f && !busy){ setZone('front', f); showStage(); }
+});
 
-function bubble(who, html, me){
+/* mode + controls */
+let mode = store.get('mode', 'auto');
+$$('.seg [data-mode]').forEach(b => {
+  b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+  b.onclick = () => {
+    mode = b.dataset.mode; store.set('mode', mode);
+    $$('.seg [data-mode]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    syncModeHint();
+  };
+});
+$('#relief').checked = !!store.get('relief', false);
+$('#depth').value = store.get('depth', 100);
+$('#budget').value = store.get('budget', 'auto');
+$('#useAi').checked = store.get('ai', true);
+$('#relief').onchange = e => { store.set('relief', e.target.checked); syncModeHint(); };
+$('#depth').oninput = e => { $('#depthVal').textContent = e.target.value + '%'; store.set('depth', +e.target.value); };
+$('#budget').onchange = e => store.set('budget', e.target.value);
+$('#useAi').onchange = e => store.set('ai', e.target.checked);
+function syncModeHint(){
+  const hints = {
+    auto: imgFront ? 'Auto: a head-to-toe figure gets the character rig; any other subject is sculpted from its silhouette.'
+                   : 'Auto: text prompts build a rigged character; images are measured from their pixels.',
+    character: 'Character rig: proportions, parts, garments and accessories from a parametric skeleton. Best for a full body.',
+    sculpt: 'Sculpt: reads the silhouette and the art’s own shading and rebuilds it as one watertight solid. Any subject.'
+  };
+  $('#modeHint').textContent = hints[mode];
+}
+syncModeHint();
+
+/* ── chat thread ──────────────────────────────────────────────────────── */
+const thread = $('#thread'), msgEl = $('#msg');
+const QUICK = ['flat back', 'more volume', 'shallower', 'high detail', 'under 2000 tris', 'keep it under 1500 tris'];
+const STARTERS = [
+  { t:'Sculpt this', d:'drop a game sprite, concept art, a photo of a toy or a logo', icon:'🖼' },
+  { t:'Chibi mage, purple robe, wizard hat, staff', d:'text → rigged character', icon:'🧙' },
+  { t:'Heavy orc in silver armour with a big sword', d:'text → rigged character', icon:'🪓' },
+];
+$('#sug').innerHTML = STARTERS.map((s, i) =>
+  `<button data-starter="${i}" title="${esc(s.d)}">${s.icon} ${esc(s.t.length > 34 ? s.t.slice(0,34) + '…' : s.t)}</button>`).join('') +
+  QUICK.map(q => `<button data-quick="${esc(q)}">✎ ${esc(q)}</button>`).join('');
+$('#sug').onclick = e => {
+  const st = e.target.closest('[data-starter]'), q = e.target.closest('[data-quick]');
+  if (st){ const i = +st.dataset.starter, s = STARTERS[i];
+    if (i === 0){ $('#fileFront').click(); return; }
+    msgEl.value = s.t; autosize(); msgEl.focus(); return; }
+  if (q){ msgEl.value = q.dataset.quick; send(); }
+};
+
+function bubble(html, me){
   const row = document.createElement('div');
   row.className = 'row' + (me ? ' me' : '');
-  row.innerHTML = `<div class="av">${me ? '🧑' : '🤖'}</div><div class="bub">${who ? `<div class="who">${who}</div>` : ''}${html}</div>`;
-  thread.appendChild(row); thread.scrollTop = thread.scrollHeight;
-  row.scrollTo = () => thread.scrollTo({top: row.offsetTop - 8, behavior: 'smooth'});
+  row.innerHTML = `<div class="av" aria-hidden="true">${me ? '🧑' : '⚒'}</div><div class="bub">${html}</div>`;
+  thread.appendChild(row);
+  thread.scrollTop = thread.scrollHeight;
   return row.querySelector('.bub');
 }
-function thinking(){
-  const b = bubble('Character Forge', `<div class="typing"><span class="dot"></span><span class="dot"></span>
-    <span class="dot"></span><span id="tstage" style="margin-left:6px">director is planning the build…</span></div>`);
-  const words = ['reading your input…', 'AI director is choosing proportions, materials and a poly budget…',
-                 'reconstructing geometry…', 'unwrapping UVs and baking PBR atlases…',
-                 'optimising topology…', 'exporting GLB / OBJ / STL…'];
-  let i = 0;
-  const t = setInterval(() => {
-    const el = b.querySelector('#tstage'); if (el) el.textContent = words[Math.min(++i, words.length - 1)];
-  }, 6500);
-  return { b, stop(){ clearInterval(t); } };
+function say(msg){
+  const b = bubble(`<div class="err">${esc(msg)}</div>`);
+  setTimeout(() => b.closest('.row').remove(), 4200);
 }
-
+function thinking(){
+  return bubble(`<div class="who">Character Forge</div><div class="typing"><i></i><i></i><i></i>
+    <span>planning the build…</span></div>`);
+}
 function planCard(plan, report){
   if (!plan) return '';
   const p = plan.palette || {}, mats = plan.materials || {};
   const rows = [
-    ['style', `${plan.style} · ${plan.heads_tall} heads tall · build ${plan.build}`],
-    ['species', plan.species || '—'],
-    ['height', `${plan.height_m} m`],
-    ['triangle budget', `${(plan.target_tris || 0).toLocaleString()} tris → built ${report.geometry.triangles.toLocaleString()}`],
-    ['resolution', `${plan.texture_size}² textures · sphere ${plan.detail?.sphere_sub}/cyl ${plan.detail?.cyl_sec}/caps ${plan.detail?.cap_cnt}`],
-    ['features', (plan.features || []).join(', ') || 'base body only'],
-    ['confidence', plan.confidence != null ? plan.confidence : '—'],
+    ['style', plan.style || '—'],
+    ['proportions', plan.heads_tall ? `${plan.heads_tall} heads tall · build ${plan.build}` : 'measured from pixels'],
+    ['height', plan.height_m ? `${plan.height_m} m` : '—'],
+    ['triangle budget', `${nf(plan.target_tris)} target → ${nf(report.geometry.triangles)} built`],
+    ['resolution', `${report.geometry.texture_size}² · ${report.geometry.materials} material`],
+    ['features', (plan.features || []).join(', ') || (report.accessories || []).join(', ') || '—'],
+    ['reconstructor', plan.reconstructor || 'parametric rig'],
   ];
-  return `<details><summary>AI build plan <span class="chip ai" style="margin-left:8px">${esc(report.ai.plan_source || '')}${report.ai.model ? ' · ' + esc(report.ai.model) : ''}</span></summary>
-  <div class="dbody">
-    <div class="kv">${rows.map(([k, v]) => `<div>${esc(k)}</div><div>${esc(v)}</div>`).join('')}</div>
-    ${plan.back_view ? `<div style="margin-top:9px"><span class="who">hidden / unseen geometry</span>${esc(plan.back_view)}</div>` : ''}
-    ${(plan.modelling_plan || []).length ? `<div style="margin-top:9px"><span class="who">modelling steps</span>
+  return `<details><summary>Build plan <span class="chip ai" style="margin:0 0 0 6px">${esc(report.ai?.plan_source || '')}</span></summary>
+    <div class="dbody"><div class="kv">${rows.map(([k, v]) => `<div>${esc(k)}</div><div>${esc(v)}</div>`).join('')}</div>
+    ${plan.back_view ? `<div style="margin-top:8px"><span class="who">inferred back</span>${esc(plan.back_view)}</div>` : ''}
+    ${(plan.modelling_plan || []).length ? `<div style="margin-top:8px"><span class="who">steps</span>
       <ul class="tight">${plan.modelling_plan.map(s => `<li>${esc(s)}</li>`).join('')}</ul></div>` : ''}
-    <div class="swatches">${Object.entries(p).map(([k, v]) =>
-      `<span class="sw"><i style="background:${esc(v)}"></i>${esc(k.replace('_',' '))}${mats[k] ? ' · ' + esc(mats[k]) : ''}</span>`).join('')}</div>
-  </div></details>`;
+    ${Object.keys(p).length ? `<div class="acts">${Object.entries(p).map(([k, v]) =>
+      `<span class="chip"><i style="width:10px;height:10px;border-radius:3px;background:${esc(v)};display:inline-block"></i>${esc(k.replace('_',' '))}</span>`).join('')}</div>` : ''}
+    </div></details>`;
 }
-
-function statsGrid(g){
-  return `<div class="stats">
-    <div class="stat"><b>${g.triangles.toLocaleString()}</b><span>triangles${g.decimated ? ' (from ' + g.triangles_before_optimize.toLocaleString() + ')' : ''}</span></div>
-    <div class="stat"><b>${g.vertices.toLocaleString()}</b><span>vertices</span></div>
-    <div class="stat"><b>${g.volumes || '—'}</b><span>volumes</span></div>
-    <div class="stat"><b>${g.materials}</b><span>material / draw call</span></div>
-    <div class="stat"><b>${g.texture_size}²</b><span>${(g.maps || []).join(' · ')}</span></div>
-  </div>`;
+function statsGrid(rep){
+  const g = rep.geometry || {}, m = rep.memory || {};
+  const cells = [
+    [nf(g.triangles) + (g.decimated ? ` ↓${nf(g.triangles_before_optimize)}` : ''), 'triangles'],
+    [nf(g.vertices), 'vertices'],
+    [g.materials === 1 ? '1' : nf(g.materials), 'material / draw call'],
+    [`${g.texture_size}²`, 'texture, 3 maps'],
+    [`${nf(rep.size_m ? Math.max(...rep.size_m) * 100 : rep.height_m * 100)} cm`, 'largest side'],
+    [g.watertight === undefined ? '—' : (g.watertight ? 'yes' : 'no'), 'watertight (STL)'],
+    [(rep.build_ms / 1000).toFixed(1) + ' s', 'on this instance'],
+    [m.atlas_px ? `${nf(m.headroom_mb)} MB` : '—', 'RAM free after'],
+  ];
+  return `<div class="stats">${cells.map(([b, s]) =>
+    `<div class="stat"><b>${esc(b)}</b><span>${esc(s)}</span></div>`).join('')}</div>`;
 }
-
 function resultBubble(report){
-  const panel = panelFor(report);
-  const note = report.ai?.error
-    ? `<div class="chip warn">⚠ AI director unavailable — built with the rule planner (${esc(String(report.ai.error).slice(0,90))})</div>` : '';
-  const html = `
+  const warn = report.ai?.error
+    ? `<span class="chip warn">AI director unavailable → rule planner (${esc(String(report.ai.error).slice(0,70))})</span>` : '';
+  const tag = report.pipeline === 'sculpt'
+    ? `<span class="chip ok">sculpted from ${esc((report.tags || [])[0] || 'the image')}</span>` : '';
+  return `
     ${report.plan?.brief ? `<p>${esc(report.plan.brief)}</p>` : ''}
-    <div>${note}<span class="chip ok">${report.geometry.triangles.toLocaleString()} tris</span>
-      <span class="chip">${esc(report.style)}</span>
-      <span class="chip">${report.height_m} m</span>
-      ${(report.accessories || []).map(a => `<span class="chip">${esc(a.replace('_',' '))}</span>`).join('')}</div>
+    <div>${warn}${tag}<span class="chip">${nf(report.geometry.triangles)} tris</span>
+      <span class="chip">${esc(report.style || '')}</span>
+      ${(report.accessories || []).slice(0,6).map(a => `<span class="chip">${esc(String(a).replace(/_/g,' '))}</span>`).join('')}</div>
+    ${statsGrid(report)}
     ${planCard(report.plan, report)}
-    ${statsGrid(report.geometry)}
-    <details><summary>Pipeline timing</summary><div class="dbody">
-      <div class="stages">${report.stages.map(s => `<span class="stage done">${esc(s.name)} · ${s.ms} ms</span>`).join('')}</div>
+    <details><summary>How it was built</summary><div class="dbody"><div class="stages">
+      ${report.stages.map(s => `<div class="stage"><b>${esc(s.name)}</b><span>${nf(s.ms)} ms</span></div>`).join('')}</div>
+      ${(report.notes || []).length ? `<ul class="tight" style="margin-top:8px">${report.notes.slice(0,9).map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
     </div></details>
-    <details><summary>Texture atlases</summary><div class="dbody"><div class="atlas">
-      <figure><img src="/model/${report.id}/texture_atlas.png" alt=""><figcaption>base colour</figcaption></figure>
-      <figure><img src="/model/${report.id}/normal_atlas.png" alt=""><figcaption>normal</figcaption></figure>
-      <figure><img src="/model/${report.id}/mr_atlas.png" alt=""><figcaption>metal / rough</figcaption></figure>
+    <details><summary>Texture maps</summary><div class="dbody"><div class="atlas">
+      <figure><img src="/model/${report.id}/texture_atlas.png" alt="base colour atlas" loading="lazy"><figcaption>base colour</figcaption></figure>
+      <figure><img src="/model/${report.id}/normal_atlas.png" alt="normal atlas" loading="lazy"><figcaption>normal</figcaption></figure>
+      <figure><img src="/model/${report.id}/mr_atlas.png" alt="metallic roughness atlas" loading="lazy"><figcaption>metal / rough</figcaption></figure>
     </div></div></details>
-    ${(report.notes || []).length ? `<details><summary>Notes from the pipeline</summary><div class="dbody">
-      <ul class="tight">${report.notes.slice(0,8).map(n => `<li>${esc(n)}</li>`).join('')}</ul></div></details>` : ''}
     <div class="acts">
-      <a class="dl primary" href="${report.downloads.glb}" download target="_blank" rel="noopener">⬇ GLB <small>Unity · Godot</small></a>
+      <a class="dl primary" href="${report.downloads.glb}" download target="_blank" rel="noopener">⬇ GLB <small>Unity · Godot · Blender</small></a>
       <a class="dl" href="${report.downloads.obj}" download target="_blank" rel="noopener">OBJ + MTL</a>
-      <a class="dl" href="${report.downloads.stl}" download target="_blank" rel="noopener">STL</a>
-      <a class="dl" href="${report.downloads.all}" download target="_blank" rel="noopener">Everything (.zip)</a>
-      <button class="mini" data-copy="${report.downloads.glb}">copy link</button>
-      <button class="mini" data-view="${report.mid}">show in viewer</button>
-    </div>
-    <div class="acts">${quickChips(report.mid)}</div>`;
-  return html;
+      <a class="dl" href="${report.downloads.stl}" download target="_blank" rel="noopener">STL <small>print</small></a>
+      <a class="dl" href="${report.downloads.all}" download target="_blank" rel="noopener">.zip <small>everything</small></a>
+      <button class="mini" data-view="${esc(report.preview)}" data-title="${esc(report.id)}">↺ show again</button>
+      <button class="mini" data-copy="${report.downloads.glb}">⧉ copy link</button>
+    </div>`;
 }
-const panelFor = r => r;
-
-function pushTurn(turn, report){
-  const b = bubble('Character Forge', turn.kind === 'revision'
-    ? `<div class="who">revision applied to build ${esc(report.id)}</div>` + resultBubble(report)
-    : resultBubble(report));
-  b.querySelector('[data-view]')?.addEventListener('click', () => loadModel(report.preview, `${report.id} · ${report.geometry.triangles.toLocaleString()} tris`));
+function renderTurn(turn, report, animate){
+  const b = bubble(`<div class="who">Character Forge ${turn.kind === 'revision' ? '· revision' : ''}</div>
+    ${resultBubble(report)}`);
+  b.querySelector('[data-view]')?.addEventListener('click', e =>
+    loadModel(e.target.dataset.view, `${report.id} · ${nf(report.geometry.triangles)} tris`,
+      [report.pipeline === 'sculpt' ? 'sculpt' : 'rig', `${report.geometry.texture_size}² PBR`, `${report.height_m} m`]));
+  if (animate) loadModel(report.preview, `${report.id} · ${nf(report.geometry.triangles)} tris`,
+    [report.pipeline === 'sculpt' ? 'sculpted solid' : 'character rig',
+     report.geometry.watertight === false ? 'not watertight' : 'watertight', `${report.geometry.texture_size}² PBR`]);
 }
+document.addEventListener('click', e => {
+  const c = e.target.closest('[data-copy]');
+  if (c){ const url = new URL(c.dataset.copy, location.origin).href;
+    navigator.clipboard?.writeText(url).then(() => { c.textContent = '✓ link copied';
+      setTimeout(() => c.textContent = '⧉ copy link', 1600); }, () => say(url)); }
+});
 
-async function send(){
+/* ── send ─────────────────────────────────────────────────────────────── */
+function autosize(){ msgEl.style.height = 'auto'; msgEl.style.height = Math.min(msgEl.scrollHeight, 132) + 'px'; }
+msgEl.addEventListener('input', autosize);
+msgEl.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
+$('#box').addEventListener('submit', e => { e.preventDefault(); send(); });
+
+let session = store.get('session', '');
+
+async function send(retryNote){
   if (busy) return;
   const text = msgEl.value.trim();
-  if (!text && !imageFile) return;
-  busy = true; sendBtn.disabled = true;
-  const imgNote = imageFile ? `<div class="muted" style="font-size:12px;color:var(--muted)">🖼 ${esc(imageFile.name || 'clipboard image')}</div>` : '';
-  bubble('You', `<p>${esc(text || '(concept image)')}</p>${imgNote}`, true);
+  if (!text && !imgFront){ say('Add an image or describe the character you want.'); return; }
+  busy = true; $('#send').disabled = true;
+  const imgNote = imgFront ? `<div class="muted" style="font-size:12px;color:var(--muted)">🖼 ${esc(imgFront.name || 'pasted image')}</div>` : '';
+  bubble(`<p>${esc(text || '(image)')}</p>${imgNote}${retryNote ? `<div class="muted" style="font-size:11.5px">${esc(retryNote)}</div>` : ''}`, true);
   msgEl.value = ''; autosize();
-  const t = thinking();
-  try{
-    const fd = new FormData();
-    fd.append('message', text);
-    fd.append('session', session);
-    fd.append('budget', document.getElementById('budget').value);
-    fd.append('use_ai', document.getElementById('useAi').checked ? '1' : '0');
-    if (imageFile) fd.append('image', imageFile, imageFile.name || 'concept.png');
-    const r = await fetch('/chat', {method:'POST', body: fd});
+  progBegin(); const th = thinking();
+  const fd = new FormData();
+  fd.append('session', session);
+  fd.append('message', text);
+  fd.append('mode', mode);
+  fd.append('budget', $('#budget').value);
+  fd.append('use_ai', $('#useAi').checked ? '1' : '0');
+  fd.append('roundness', ($('#depth').value / 100).toFixed(2));
+  if ($('#relief').checked) fd.append('relief', '1');
+  if (imgFront) fd.append('image', imgFront, imgFront.name || 'front.png');
+  if (imgBack) fd.append('back_image', imgBack, imgBack.name || 'back.png');
+  try {
+    const r = await fetch('/chat', { method:'POST', body:fd });
     const data = await r.json();
-    t.stop();
-    if (!r.ok) throw new Error(data.error || 'generation failed');
-    session = data.session; localStorage.setItem('cf_session', session);
-    t.b.closest('.row').remove();
-    pushTurn(data.turn, data.report);
-    thread.lastElementChild?.scrollIntoView({block: 'start', behavior: 'smooth'});
-    loadModel(data.report.preview, `${data.report.id} · ${data.report.geometry.triangles.toLocaleString()} tris`);
-    if (imageFile){ imageFile = null; thumb.style.display = 'none'; fileEl.value = ''; }
-    loadRecent();
-  }catch(e){
-    t.stop(); t.b.innerHTML = `<div class="err">${esc(e.message)}</div>`;
-  }finally{
-    busy = false; sendBtn.disabled = false; msgEl.focus(); thread.scrollTop = thread.scrollHeight;
+    if (r.status === 429 && data.busy){                 // queued: wait, then try once
+      progEnd(); th.closest('.row').remove(); busy = false; $('#send').disabled = false;
+      const wait = Math.min(30, data.retry_after || 5);
+      say(`Queued behind another build — retrying in ${wait} s`);
+      setTimeout(() => send(`auto-retry after ${wait} s`), wait * 1000);
+      return;
+    }
+    if (!r.ok) throw new Error(data.error || `server replied ${r.status}`);
+    progEnd(); th.closest('.row').remove();
+    session = data.session; store.set('session', session);
+    renderTurn(data.turn, data.report, true);
+    setZone('front', null); setZone('back', null);
+    pollHealth(); loadGallery(false);
+  } catch (e){
+    progEnd(); th.closest('.row').remove();
+    bubble(`<div class="err"><b>That build did not finish.</b><br>${esc(String(e.message || e))}
+      <div class="acts"><button class="mini" id="retryBtn">↻ Try again</button>
+      <a class="dl" href="/health" target="_blank" rel="noopener">instance status</a></div></div>`);
+    $('#retryBtn').onclick = ev => { ev.target.closest('.row').remove(); send(); };
+  } finally {
+    busy = false; $('#send').disabled = false;
   }
 }
-sendBtn.onclick = send;
-
-/* ───────── sessions / recent ───────── */
-document.getElementById('newBtn').onclick = async () => {
-  const r = await fetch('/reset', {method:'POST'}); const d = await r.json();
-  session = d.session; localStorage.setItem('cf_session', session);
-  thread.innerHTML = ''; document.getElementById('vmeta').textContent = '';
-  document.getElementById('vhint').style.display = 'grid';
-  if (model){ scene.remove(model); model = null; }
-  greet();
+/* ── gallery ──────────────────────────────────────────────────────────── */
+async function loadGallery(open){
+  if (open) $('#drawer').classList.add('on');
+  try {
+    const r = await fetch('/recent'); const d = await r.json();
+    $('#gallery').innerHTML = (d.items || []).length ? d.items.map(it => `
+      <button class="item" data-open="${esc(it.id)}">
+        <span class="g" aria-hidden="true">${it.source === 'image' ? '🖼' : '✏️'}</span>
+        <span><span class="t">${esc((it.prompt || 'untitled').slice(0, 84))}</span>
+          <span class="s">${nf(it.triangles)} tris · ${esc(it.style || '')}${it.created_at ? ' · ' + esc(it.created_at.slice(0, 16).replace('T', ' ')) : ''}</span></span>
+      </button>`).join('') : `<p class="muted" style="padding:8px">Nothing built yet on this instance.</p>`;
+  } catch (e){ $('#gallery').innerHTML = `<p class="muted" style="padding:8px">Could not read the gallery.</p>`; }
+}
+$('#gallery').onclick = async e => {
+  const b = e.target.closest('[data-open]'); if (!b) return;
+  try {
+    const r = await fetch('/report/' + b.dataset.open); const rep = await r.json();
+    if (rep.error) return say(rep.error);
+    rep.id = rep.id || b.dataset.open;
+    $('#drawer').classList.remove('on');
+    renderTurn({ kind:'build' }, rep, true);
+  } catch (err){ say('That build is no longer on this instance.'); }
 };
-document.getElementById('recentBtn').onclick = async () => {
-  const r = await fetch('/recent'); const d = await r.json();
-  if (!d.items.length) return bubble('Character Forge', '<p>Nothing built yet.</p>');
-  bubble('Character Forge', '<div class="who">recent builds</div>' + d.items.map(it =>
-    `<div class="acts"><button class="mini" data-recent="${it.id}">${esc((it.prompt || '').slice(0, 52))} · ${(it.triangles||0).toLocaleString()} tris</button></div>`).join(''));
-  document.querySelectorAll('[data-recent]').forEach(b => b.onclick = async () => {
-    const rr = await fetch('/report/' + b.dataset.recent); const rep = await rr.json();
-    if (rep.error) return;
-    loadModel(rep.preview, `${rep.id} · ${rep.geometry.triangles.toLocaleString()} tris`);
-  });
+$('#galleryBtn').onclick = () => { loadGallery(true); $('#drawer').classList.add('on'); };
+$('#drawer').addEventListener('click', e => { if (e.target.closest('[data-close]')) $('#drawer').classList.remove('on'); });
+addEventListener('keydown', e => { if (e.key === 'Escape') $('#drawer').classList.remove('on'); });
+
+$('#newBtn').onclick = async () => {
+  try {
+    const r = await fetch('/reset', { method:'POST' }); const d = await r.json();
+    session = d.session; store.set('session', session);
+  } catch {}
+  thread.innerHTML = ''; greet();
+  if (model){ scene.remove(model); model = null; }
+  $('#vmeta').innerHTML = ''; $('#empty').classList.remove('gone'); $('#vTitle').textContent = '3D stage';
+  setTab('build');
 };
 
 function greet(){
-  bubble('Character Forge', `<p>Tell me the character you want — a sentence is enough. I'll plan it like a modeller would
-  (proportions, silhouette breakdown, materials, unseen back side), choose a sensible polygon budget, then build the mesh,
-  UVs, PBR textures and exports.</p>
-  <p style="color:var(--muted);font-size:13px">Prefer an existing design? Drop a concept image in — I'll read silhouette, proportions,
-  materials and colours from it. After a build, just keep talking: <i>“make the cape red”</i>, <i>“add wings”</i>, <i>“keep it under 2000 tris”</i>.</p>`);
+  bubble(`<p><b>Drop any image</b> and you get a real 3D model of it — a game sprite, a photo of a toy, a logo,
+    a bust. The silhouette and the art’s own shading become geometry, the textures come straight from your file,
+    and you leave with GLB / OBJ / STL you can drop into Unity, Godot or a slicer.</p>
+  <p class="muted" style="font-size:13px">Or describe a character in one line: <i>“chibi cat-girl mage with a pointy hat and a staff”</i>.
+    After a build, keep talking — <i>“flat back”</i>, <i>“more volume”</i>, <i>“under 2000 tris”</i>, <i>“make the robe red”</i>.</p>
+  <div class="acts">
+    <button class="mini" data-jump="drop">↓ where to drop the image</button>
+    <button class="mini" data-jump="how">how the reconstruction works</button>
+  </div>`);
 }
-if (new URLSearchParams(location.search).get('fresh')){ /* skip restore */ }
-async function restore(){
-  if (!session) return false;
-  try{
-    const r = await fetch('/chat/' + session);
-    if (!r.ok) return false;
-    const d = await r.json();
-    if (!d.turns?.length) return false;
-    d.turns.forEach(t => { const rep = d.reports?.[t.mid]; if (rep){ rep.id = rep.id || t.mid;
-      rep.downloads = rep.downloads || {glb:'',obj:'',stl:'',all:''}; pushTurn(t, rep); } });
-    const last = d.turns[d.turns.length - 1];
-    const rep = d.reports?.[last.mid];
-    if (rep) loadModel(rep.preview, `${rep.id} · ${rep.geometry.triangles.toLocaleString()} tris`);
-    return true;
-  }catch(e){ return false; }
-}
-
-/* ───────── frame / download guard ───────── */
-try{
-  if (window.self !== window.top){
-    document.getElementById('frameNote').style.display = 'flex';
-    document.getElementById('openTab').onclick = () => window.open(location.href, '_blank', 'noopener');
+thread.addEventListener('click', e => {
+  const j = e.target.closest('[data-jump]'); if (!j) return;
+  if (j.dataset.jump === 'drop'){ $('#zoneFront').scrollIntoView({ block:'center', behavior:'smooth' }); $('#zoneFront').focus(); }
+  else{
+    bubble(`<div class="who">how the sculptor works</div>
+      <div class="dbody" style="padding:0">
+      <ul class="tight">
+        <li>the subject is isolated from the alpha channel, or by margin-colour segmentation + morphology</li>
+        <li>each horizontal run of the silhouette becomes a circular cross-section (shape from silhouette)</li>
+        <li>depth is capped by the largest disc that fits inside the outline, so a side view stays flat instead of puffing out</li>
+        <li>a bounded luminance high-pass adds noses, brows, folds and panel lines (shape from shading)</li>
+        <li>the solid is sampled by marching cubes into one watertight mesh, then decimated to your triangle budget</li>
+        <li>UVs are a front planar projection, so the base colour is literally your artwork; the normal map is baked from the same depth field, so detail survives decimation</li>
+        <li>exports: GLB (PBR, vertex-tinted back), OBJ+MTL, STL, the three maps, and a JSON report</li>
+      </ul>
+      <p style="margin-top:8px">Single-image reconstruction cannot see the unseen half: without a back-view upload the rear is inferred by symmetry.
+      It is a faithful 2.5D solid, not a neural diffusion model — that is also why it runs in about a second on a free CPU.</p></div>`);
   }
-}catch(e){ /* cross-origin: we're framed */ document.getElementById('frameNote').style.display = 'flex'; }
+});
 
-fetch('/health').then(r => r.json()).then(h => {
-  const el = document.getElementById('aiState'), cb = document.getElementById('useAi');
-  if (h.ai) el.textContent = '· ' + (h.ai_model || 'ready');
-  else { el.textContent = '(no API key — rule planner)'; cb.checked = false; cb.disabled = true; }
-}).catch(() => {});
-async function loadRecent(){ /* gallery is fetched on demand */ }
-
-(async () => { if (!await restore()) greet(); })();
+/* ── boot ─────────────────────────────────────────────────────────────── */
+(async function restore(){
+  if (!session) return greet();
+  try {
+    const r = await fetch('/chat/' + session);
+    if (!r.ok) return greet();
+    const d = await r.json();
+    if (!d.turns?.length) return greet();
+    let last = null;
+    for (const t of d.turns){
+      const rep = d.reports?.[t.mid]; if (!rep) continue;
+      rep.id = rep.id || t.mid;
+      rep.downloads = rep.downloads || {};
+      rep.memory = rep.memory || {};
+      bubble(`<div class="who">you</div><p>${esc(t.text || '(image)')}</p>`, true);
+      renderTurn(t, rep, false); last = rep;
+    }
+    if (last) loadModel(last.preview, `${last.id} · ${nf(last.geometry.triangles)} tris`,
+      [last.pipeline === 'sculpt' ? 'sculpted solid' : 'character rig', `${last.geometry.texture_size}² PBR`]);
+  } catch (e){ greet(); }
+})();
+if (matchMedia('(max-width:900px)').matches) setTab('build');
 </script>
 </body>
 </html>

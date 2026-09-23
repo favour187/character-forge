@@ -2,97 +2,212 @@
 
 **Live:** https://character-forge.onrender.com · **Code:** https://github.com/favour187/character-forge
 
+Upload *any* image — a concept drawing, a game sprite, a photo of a toy, a logo, a bust — and get a
+**game-ready 3D model** back: GLB with PBR textures, OBJ+MTL, and an STL you can slice. Or describe a
+character in one sentence and get a rigged-style figure with the proportions, colours and gear you asked for.
+Everything runs on CPU in about a second, on a **free** Render instance with 512 MB and 0.1 core.
 
-A self-contained **text / concept-image → game-ready 3D character** tool.
-It implements the exact pipeline you described — analyze → reconstruct → UV →
-texture → optimize → export — as runnable code, with a web UI, a live PBR
-viewer and Unity-ready downloads.
+---
+
+## Main objectives
+
+1. **Any image in, a real 3D model out.** Not a preview, not a render — a mesh with UVs, PBR maps and a
+   closed, printable surface. A side view of a car must stay as flat as a car, a coin must come out as a coin.
+2. **Zero "AI soup".** Deterministic, inspectable reconstruction: every triangle is explained by the
+   silhouette or by the artwork's own light and shade. No random blobs, no melting faces, no floating junk.
+   Where the camera cannot see, we say so in the report instead of hallucinating.
+3. **Fit the constraints of a free tier.** 512 MB, 0.1 CPU, ephemeral disk, cold starts. The pipeline is
+   built around that ceiling and enforces it in code — see [docs/MEMORY.md](docs/MEMORY.md).
+4. **Game-ready means numbers.** Triangle budget honoured (mobile 1.5k / game 5k / hero 15k), one material,
+   one draw call, Y-up metres, A-pose, watertight where it matters for STL.
+5. **Talk to it.** A conversational UI: "make the back flat", "give it more volume", "under 2000 tris",
+   "make the robe red" — each turn rebuilds the same subject with that change applied.
+6. **Every stage swappable.** Each stage is a function with a small contract, so a neural model
+   (TripoSR / InstantMesh / Hunyuan3D for reconstruction, a diffusion painter for textures) can replace
+   one stage without touching the rest — see [Swapping in a neural model](#swapping-in-a-neural-model).
+7. **Usable on a phone.** The site is the product: drop, forge, orbit, download — one column, big targets,
+   a Build / 3D tab switch on small screens.
+
+### Limits worth knowing (measured, not guessed)
+
+* **One image sees one side.** The rear is mirrored from the front silhouette (or measured, if you upload a
+  back view). Details hidden from the camera — a backpack strap, an open coat — are inferred, and the report
+  says so instead of pretending.
+* **Depth is a prior, not a measurement.** Where the silhouette narrows (a car's wheels, a hat brim), a
+  single-view reconstruction tapers too, so a side view of a car looks wedge-like from the front. That is
+  shape-from-silhouette being *honest* about its input, not a bug to hide: two views fix it.
+* **Silhouette fidelity is exact, surface detail is a normal map.** Geometry follows your outline
+  pixel-for-pixel; the fine stuff (eyes, folds, panel lines) is baked from the art's own shading, so it reads
+  correctly in-engine and does not survive a close-up silhouette check.
+* **Text-to-3D is parametric**, not generative: descriptions build a stylised rigged figure, because there
+  are no pixels to measure.
+
+### What it is not
+
+It is **not** a diffusion-based image-to-3D model. Those need a GPU (or a paid API), minutes, and
+hundreds of MB; this has to live on a free 0.1-CPU box and answer in a second. So the geometric part is
+classical computer vision (shape from silhouette + shape from shading + marching cubes), and the AI part is
+used where an LLM actually helps: *deciding* what to build. Honest 2.5D reconstruction from one photo
+beats a blurry guess at a full mesh, and it is verifiably faithful to your input — the silhouette matches
+pixel for pixel.
+
+---
+
+## The two reconstructors
+
+`mode=auto` picks between them per input; you can also force either from the UI or the API.
 
 ```
-IMAGE / TEXT
-     ↓   engine.analyze_text / engine.analyze_image
-AI understands the object        silhouette, proportions (heads-tall), palette, parts
-     ↓   engine.build_character
-Predicts 3D shape                 parametric volumes in A-pose, hidden side inferred
-     ↓   engine.optimize_parts
-Game topology                     quadric decimation to a polygon budget (mobile/game/hero)
-     ↓   engine.assemble  (+ _part_uv)
-Creates UVs / surface structure   per-part projection into a 4×4 atlas
-     ↓   engine.paint_atlas
-Generates textures                baseColor · metallic-roughness · normal
-     ↓   engine.finalize
-3D MODEL                          GLB (PBR) · OBJ+MTL · STL
+                          ┌──────────────────────────────────────────────┐
+  IMAGE ──► isolate ──►   │  router: is this a head-to-toe figure?        │
+  (alpha or margin-LUT     │   yes ──► CHARACTER RIG (engine.build_character)│
+   segmentation, heads-    │   no  ──► SCULPT (sculpt.reconstruct)         │
+   tall + aspect + skin)   └──────────────────────────────────────────────┘
+        TEXT ──► always CHARACTER RIG (there are no pixels to measure)
+
+  SCULPT: per-row silhouette ellipse lofting ─┐
+          inscribed-disc depth bound         ├─► half-depth field ─► implicit solid
+          luminance high-pass (shading)      ┘        f(x,y,z)=min(Zf−z, Zb+z)
+                                                              │ marching cubes
+                                                              ▼
+                                            watertight mesh ─► decimate ─► UV ─► bake ─► GLB/OBJ/STL
 ```
 
-## Run
+| | **Sculpt** (any subject) | **Character rig** (humanoids) |
+|---|---|---|
+| Input | any image | text, or an image that looks like a full body |
+| Geometry | reconstructed from pixels: silhouette runs lofted as circular cross-sections, depth capped by the largest disc that fits inside the outline, bumps from the art's own shading | parametric volumes (head, hair, torso, limbs, boots + accessories) in A-pose |
+| Topology | one closed watertight surface; `relief` mode = flat back | several volumes merged into one material |
+| Textures | sampled straight from your artwork; normal map baked from the same depth field so detail survives decimation | per-part tiles from the art (image input) or procedural weave/grain/strands (text) |
+| Back side | inferred by symmetry, or **measured** if you upload a back view | semantic defaults + symmetry, stated in the report |
+| Good for | props, vehicles, logos, busts, sprites, coins, print-ready reliefs | stylised characters, chibis, heroes, anything you want posed and rigged later |
+
+Both paths then run the same tail: quadric decimation to your triangle budget, one material, GLB / OBJ+MTL /
+STL, three PNG maps and a JSON report.
+
+---
+
+## Samples
+
+Renders of the exported meshes (four camera angles, textured, vertex-tinted back) — produced by
+`python tests/preview.py`, so they are reproducible from the code in this repo:
+
+| a side view stays a *car*, not a balloon | a face crop becomes a bust | a logo becomes a coin-like solid |
+|---|---|---|
+| ![car](docs/sculpt-car.png) | ![face](docs/sculpt-face.png) | ![logo](docs/sculpt-logo.png) |
+
+| relief (flat back, for printing) | mobile budget (1.5k tris) | character rig from concept art |
+|---|---|---|
+| ![relief](docs/sculpt-relief.png) | ![mobile](docs/sculpt-mobile.png) | ![rig](docs/ui-character-rig.png) |
+
+Older UI screenshots of the previous chat layout are in [`docs/`](docs) as well.
+
+## UI
+
+Single page, no CDN (three.js is vendored), no framework:
+
+* **Drop zone** for the front view, optional **back view** slot for a two-view hull, paste from clipboard,
+  drag anywhere on the page, and the chosen file is echoed back with its pixel size and weight.
+* **Mode / relief / depth / budget / AI director** controls, remembered in `localStorage`.
+* **Progress overlay** with the real stage list and an honest "a cold instance takes ~50 s to wake" note,
+  plus automatic single retry when the server answers `429` because a build is already running.
+* **Result card**: brief, measured stats (triangles, vertices, largest side, watertight, build seconds,
+  RAM left), the build plan, per-stage timings, the three texture maps, and the four downloads.
+* **3D stage**: orbit / pinch-zoom, Material · Anime · Wireframe · Normals · UV shading, turntable,
+  framing reset, PNG snapshot of the viewport, fullscreen.
+* **Gallery drawer** of recent builds (Postgres-backed when `DATABASE_URL` is set, so it survives deploys).
+* Responsive from 360 px up: below 900 px the two panes become **Build / 3D model** tabs, controls and
+  buttons keep 44 px touch targets, `prefers-reduced-motion` is honoured, and everything is labelled for
+  screen readers (`role=tablist`, `aria-live` status, `aria-pressed` toggles, visible focus rings).
+
+---
+
+## Run it
 
 ```bash
 pip install -r requirements.txt
-python server.py            # → http://localhost:8000
+python server.py                      # → http://localhost:8000
+python tests/check.py                  # end-to-end check against that server
+python forge_cli.py --image concept.png --mode sculpt --depth 0.8 --out out/hero
 ```
 
-The web viewer defaults to **Anime** mode (cel shading + line art + soft contact shadow);
-switch to *Material* for straight PBR. Image builds run at 2048² textures.
+No API key is needed: the rule-based planner and the sculptor are local. Set `OPENROUTER_API_KEY` to let a
+language model act as the build director for the character rig (see [docs/API.md](docs/API.md)).
 
-CLI (no UI):
+## API
+
+`POST /chat` (conversational, keeps the session) and `POST /generate` (one-shot) take the same fields:
+`text` or `image`, optional `back_image`, `mode` (`auto|character|sculpt`), `budget`
+(`auto|mobile|game|high`), `relief`, `roundness` (0.25–1.6 depth multiplier), `use_ai`.
+Full reference with curl examples and the report schema: **[docs/API.md](docs/API.md)**.
 
 ```bash
-python forge_cli.py --text "chibi cat-girl mage with staff and pointy hat" --out out/mage
-python forge_cli.py --image concept.png --budget mobile --out out/hero
+curl -s -F image=@car.png -F mode=sculpt -F budget=game https://character-forge.onrender.com/generate | jq '.size_m, .geometry.watertight'
 ```
-
-## How each stage works
-
-| Stage | What happens | Where |
-|---|---|---|
-| **1. Analyze (AI)** | When `OPENROUTER_API_KEY` is set, the prompt or image is sent to an LLM / vision model through **OpenRouter** (`ai.py`). It returns style, proportions, a full palette, accessories, species and a one-line brief as JSON. For images the pixel-measured colours and heads-tall proportions still win (they're exact); the model contributes semantics. Free-tier models by default (`nex-agi/nex-n2.5-mini:free` → Gemma 4 → Qwen 3.8 → `openrouter/free`); set `OPENROUTER_MODEL` to use a paid one (e.g. `google/gemini-2.5-flash-lite`). Any failure (rate-limit, timeout) falls back to the heuristic analyzers below. | `ai.py` |
-| **1. Analyze (text, heuristic)** | Keyword semantics → species/build, style (chibi / stylized / realistic), accessories (backpack, wizard hat, sword, shield, cape, staff, horns, cat ears, tail, glasses), "`<colour> <part>`" grammar (e.g. *red armor*, *brown boots*). | `analyze_text` |
-| **1. Analyze (image, heuristic)** | Subject isolated from alpha or by margin-LUT segmentation + flood + morphological cleanup (handles gradient skies, HUD text, game screenshots); row-width profile finds the **neck pinch** → *heads-tall* → proportion style; shoulder width → build; positional colour priors (crown → hair, face → skin, torso, legs, feet). Occluded back is inferred by symmetry + semantic defaults. | `analyze_image` |
-| **2. Reconstruct geometry** | Character assembled as a volumetric primitive rig (head, hair cap, eyes, neck, torso, belt, arms, hands, legs, boots + accessories) in **Y-up, metres, A-pose**. | `build_character` |
-| **3. UVs** | Each part is box-projected into its own material tile of a 4×4 atlas → one material / one draw call. | `_part_uv`, `assemble` |
-| **4. Textures** | With image input the per-part tiles are **sampled from the concept art itself** (the character wears the reference design: face located by 2-D skin-blob detection, body bands per part), so the built model carries the art's colours and detail; text-only builds get procedural per-material detail (weave, leather grain, brushed metal, hair strands). Base colour + glTF metallic-roughness (B = metal, G = rough) + low-frequency normal map. | `paint_atlas` |
-| **5. Optimize** | Per-part quadric-error decimation (`fast_simplification`) to the budget: **Mobile ≈1.5k**, **Game ≈5k**, **Hero ≈15k** triangles; UVs are recomputed after decimation so seams never tear. | `optimize_parts` |
-| **6. Export** | `model.glb` (embedded PBR textures), `model.obj` + `.mtl` + PNGs, `model.stl`, plus `report.json`. | `finalize` |
 
 ## Environment variables
 
-| Var | Purpose |
-|---|---|
-| `OPENROUTER_API_KEY` | enables the AI analysis stage (optional) |
-| `OPENROUTER_MODEL` / `OPENROUTER_FALLBACK_MODELS` | model chain (defaults are free vision models) |
-| `DATABASE_URL` | Neon/Postgres mirror for the gallery (optional) |
-| `FORGE_KEEP_ROWS` | max rows kept in Postgres (default 80) |
-
-## Unity import
-
-* **GLB** – install *glTFast* (`com.unity.cloud.gltfast` via Package Manager),
-  drop the file in `Assets/`. Materials, normal and metal/rough maps import automatically.
-* **OBJ** – native import; assign `material_0.png` (base), `normal_atlas.png`, `mr_atlas.png`.
-* Scale is 1 unit = 1 m; the mesh is Y-up and A-posed for rigging (Mixamo / Blender → Humanoid rig).
+| Var | Default | Purpose |
+|---|---|---|
+| `OPENROUTER_API_KEY` | — | enables the AI build director (text/image → plan) |
+| `OPENROUTER_MODEL` / `OPENROUTER_FALLBACK_MODELS` | free vision models | the model chain; failures fall back to the rule planner |
+| `DATABASE_URL` | — | Neon/Postgres mirror of the gallery + artifacts |
+| `FORGE_KEEP_ROWS` | `80` | rows kept in Postgres |
+| `FORGE_KEEP_MODELS` | `24` | build folders kept on the ephemeral disk |
+| `FORGE_QUEUE_WAIT_S` | `75` | how long a request waits for the single build slot before `429` |
+| `FORGE_SERIALISE_BUILDS` | `1` | `0` disables the gate (only sane on a big instance) |
+| `FORGE_MEMORY_MB` | auto-detected from the cgroup | pin the memory budget the guard plans against |
+| `FORGE_MAX_TEXTURE` | `0` (auto) | force the atlas to 512 / 1024 / 2048 |
+| `FORGE_MAX_UPLOAD_MB` | `16` | request body limit |
+| `FORGE_PLAN_MAX_TOKENS` / `FORGE_PLAN_TIMEOUT_S` / `FORGE_PLAN_BUDGET_S` | `8000 / 60 / 150` | director call tuning |
 
 ## Layout
 
 ```
-forge/
-├── engine.py        the 6-stage pipeline (pure Python, no GPU)
-├── server.py        Flask API:  POST /generate  ·  GET /model/<id>/<file>
-├── forge_cli.py     command-line front end
+├── engine.py        6-stage pipeline, mode router, natural-language directives, exports
+├── sculpt.py        image → watertight mesh (silhouette + shading + marching cubes)
+├── memguard.py      512 MB discipline: build slot, atlas sizing, malloc_trim
+├── director.py ai.py  AI build director over OpenRouter (optional)
+├── db.py            optional Neon persistence
+├── server.py        Flask API + static hosting
+├── forge_cli.py     command line
 ├── static/
-│   ├── index.html   UI + three.js PBR viewer (lit / wireframe / normals / UV-check)
-│   └── vendor/      three.js r160 (vendored – works offline)
-├── models/          generated results (one folder per job)
-└── docs/            sample renders
+│   ├── index.html   the studio (vanilla JS, responsive, offline-capable)
+│   └── vendor/      three.js r160 — vendored, so no CDN dependency
+├── tests/
+│   ├── check.py     end-to-end check: run it locally or against the live URL
+│   └── fixtures.py  synthetic art drawn in code (car / face / logo / knight)
+├── docs/            API.md · MEMORY.md · sample + sculpt previews
+├── render.yaml Procfile DEPLOYMENT.md
+└── models/ sessions/    generated at runtime (git-ignored)
 ```
 
-## Where the "AI" is – and how to upgrade it
+## Swapping in a neural model
 
-The analyzer is a deterministic vision/NLP heuristic and the reconstruction is
-parametric, so it runs in ~1 s on CPU. Every stage is a function with a clean
-contract, so you can swap in a neural model per stage:
+The contract each stage honours is what makes this swappable:
 
-* **Analyze** → already pluggable: `ai.py` talks to any OpenRouter model; swap `OPENROUTER_MODEL`
-  for a stronger vision model when credits allow.
-* **Reconstruct** → replace `build_character` with an image-to-3D network (TripoSR,
-  InstantMesh, Hunyuan3D…) returning a `trimesh.Trimesh`; the UV / texture / optimize /
-  export stages work unchanged.
-* **Texture** → feed the UV layout to a diffusion texture painter instead of `paint_atlas`.
+* **Reconstruct** — `sculpt.reconstruct()` returns `(mesh, uv, (base, mr, normal), report)`. Return the same
+  tuple from a TripoSR / InstantMesh / Hunyuan3D inference call and both the UI and the exporter work
+  unchanged. `engine.run_sculpt()` is the seam.
+* **Analyze** — `ai.py` already speaks to any OpenRouter model; point `OPENROUTER_MODEL` at a stronger
+  vision model when you have credits.
+* **Texture** — feed the UV layout to a diffusion painter instead of `sculpt.bake()`.
+* **Memory** — anything you swap in must fit the guard: size the atlas with `memguard.tex_size()` and hold
+  `memguard.slot()` around the heavy part.
+
+## Unity / Godot / Blender
+
+* **GLB** — Unity: *glTFast* (`com.unity.cloud.gltfast`); Godot/Blender: open it directly. Materials,
+  normal and metal/rough maps import automatically; the tinted back is `COLOR_0`, which glTF multiplies over
+  the base colour.
+* **OBJ** — native Unity import; assign `texture_atlas.png`, `normal_atlas.png`, `mr_atlas.png`
+  (B = metal, G = rough).
+* **STL** — geometry only, for slicing; the sculpt path reports `watertight: true` when it is safe to print.
+* Scale 1 unit = 1 m, Y-up. The character rig is A-posed for Mixamo/Blender retargeting.
+
+## Deploying / redeploying
+
+Auto-deploy on push to `main`; the whole service is described in `render.yaml`. Details, the redeploy
+command and how to attach Neon: **[DEPLOYMENT.md](DEPLOYMENT.md)**. If you care about the memory limit —
+and on the free plan you do — read **[docs/MEMORY.md](docs/MEMORY.md)**: it has the measured peak of every
+configuration and the exact OOM event this repo had.

@@ -15,6 +15,8 @@ Routes
 import io
 import json
 import logging
+import shutil
+import time
 import os
 import traceback
 import uuid
@@ -25,6 +27,11 @@ from flask import Flask, jsonify, request, send_file, send_from_directory
 import ai
 import db
 import engine
+
+try:
+    import memguard
+except Exception:                                       # noqa: BLE001
+    memguard = None
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("forge")
@@ -37,8 +44,10 @@ os.makedirs(SESSIONS, exist_ok=True)
 
 app = Flask(__name__, static_folder=os.path.join(ROOT, "static"),
             static_url_path="/static")
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024     # one photo is plenty
 DB_READY = db.init()
+KEEP_DIRS = int(os.environ.get("FORGE_KEEP_MODELS", "24"))   # ephemeral disk on Render
+MAX_UPLOAD = int(os.environ.get("FORGE_MAX_UPLOAD_MB", "16"))
 
 MIME = {"glb": "model/gltf-binary", "gltf": "model/gltf+json", "obj": "text/plain",
         "mtl": "text/plain", "stl": "model/stl", "png": "image/png",
@@ -121,6 +130,29 @@ def save_session(sess):
         log.warning("session save failed: %s", e)
 
 
+def _img_path(sid):
+    return os.path.join(SESSIONS, f"{os.path.basename(sid)}_ref.img")
+
+
+def _write_session_image(sid, data):
+    try:
+        with open(_img_path(sid), "wb") as fh:
+            fh.write(data)
+    except Exception as e:                                # noqa: BLE001
+        log.warning("session image save failed: %s", e)
+
+
+def _read_session_image(sid):
+    p = _img_path(sid)
+    try:
+        if os.path.exists(p) and os.path.getsize(p) < 16 * 1024 * 1024:
+            with open(p, "rb") as fh:
+                return fh.read()
+    except Exception:                                     # noqa: BLE001
+        pass
+    return None
+
+
 def new_session(first_message=""):
     sid = uuid.uuid4().hex[:12]
     return {"id": sid, "created": None, "title": (first_message or "new character")[:60],
@@ -136,14 +168,46 @@ def index():
     return send_from_directory(app.static_folder, "index.html")
 
 
-def _run_build(sess, source, text, image_bytes, budget, use_ai, prev_plan, feedback, prompt):
+def _prune_models():
+    """Keep only the newest builds on disk (the gallery mirrors them to Postgres)."""
+    try:
+        dirs = [d for d in os.listdir(MODELS) if os.path.isdir(os.path.join(MODELS, d))]
+        dirs.sort(key=lambda d: os.path.getmtime(os.path.join(MODELS, d)), reverse=True)
+        for d in dirs[KEEP_DIRS:]:
+            shutil.rmtree(os.path.join(MODELS, d), ignore_errors=True)
+    except Exception as e:                                # noqa: BLE001
+        log.warning("prune failed: %s", e)
+
+
+def _build(sess, source, text, image_bytes, budget, use_ai, prev_plan, feedback, prompt,
+           mode="auto", relief=None, roundness=None, back_image=None):
+    """One pipeline run, inside the single-slot gate that keeps RSS under the plan
+    ceiling.  Raises memguard.Busy when the forge is already working."""
+    if memguard is not None:
+        with memguard.slot():
+            return _build_inner(sess, source, text, image_bytes, budget, use_ai, prev_plan,
+                                feedback, prompt, mode, relief, roundness, back_image)
+    return _build_inner(sess, source, text, image_bytes, budget, use_ai, prev_plan, feedback,
+                        prompt, mode, relief, roundness, back_image)
+
+
+def _build_inner(sess, source, text, image_bytes, budget, use_ai, prev_plan, feedback, prompt,
+                 mode, relief, roundness, back_image):
     mid = uuid.uuid4().hex[:12]
     model_dir = os.path.join(MODELS, mid)
     os.makedirs(model_dir, exist_ok=True)
-    report = engine.run_pipeline(
-        source=source, text=text, image_bytes=image_bytes, budget=budget,
-        model_dir=model_dir, prompt=prompt, use_ai=use_ai,
-        prev_plan=prev_plan, feedback=feedback)
+    t0 = time.time()
+    try:
+        report = engine.run_pipeline(
+            source=source, text=text, image_bytes=image_bytes, budget=budget,
+            model_dir=model_dir, prompt=prompt, use_ai=use_ai,
+            prev_plan=prev_plan, feedback=feedback, mode=mode, relief=relief,
+            roundness=roundness, back_image=back_image)
+    finally:
+        if memguard is not None:
+            memguard.release()          # never stack one build's high-water on the next
+    report["build_ms"] = int((time.time() - t0) * 1000)
+    report["memory"] = memguard.status() if memguard else None
     report["id"] = mid
     report["budget"] = budget
     report["downloads"] = _downloads(mid)
@@ -151,8 +215,10 @@ def _run_build(sess, source, text, image_bytes, budget, use_ai, prev_plan, feedb
     with open(os.path.join(model_dir, "report.json"), "w") as fh:
         json.dump(report, fh, indent=2)
     report["persisted"] = db.save(mid, report, model_dir)
+    _prune_models()
     if sess is not None:
         sess["last_mid"] = mid
+        sess["last_mode"] = report.get("pipeline") or "character"
         if report.get("plan"):
             sess["last_plan"] = report["plan"]
     return report
@@ -166,11 +232,19 @@ def chat():
             budget = "auto"
         message = (request.form.get("message") or "").strip()
         use_ai = request.form.get("use_ai", "1") not in ("0", "false", "off")
+        mode = request.form.get("mode", "auto")
+        relief = request.form.get("relief")
+        relief = None if relief in (None, "") else relief in ("1", "true", "on")
+        try:
+            roundness = float(request.form.get("roundness") or 0) or None
+        except ValueError:
+            roundness = None
         image_bytes = None
+        back_bytes = None
         if "image" in request.files and request.files["image"].filename:
-            image_bytes = request.files["image"].read()
-            if not image_bytes:
-                image_bytes = None
+            image_bytes = request.files["image"].read() or None
+        if "back_image" in request.files and request.files["back_image"].filename:
+            back_bytes = request.files["back_image"].read() or None
 
         sess = load_session(request.form.get("session"))
         if sess is None:
@@ -178,18 +252,27 @@ def chat():
 
         prev_plan = sess.get("last_plan") if (message and image_bytes is None
                                               and sess.get("last_plan")) else None
-        if image_bytes is not None or not prev_plan:
+        # a sculpt rebuild needs the original pixels; keep the last image per session
+        prior_image = None
+        if image_bytes is None and sess.get("last_mode") == "sculpt":
+            prior_image = _read_session_image(sess["id"])
+
+        if image_bytes is not None or prior_image or not prev_plan:
             source = "image" if image_bytes is not None else "text"
-            if source == "text" and not message:
+            if source == "text" and not message and not prior_image:
                 return jsonify({"error": "Type a description or attach a concept image."}), 400
             prompt = message or "(concept image)"
-            report = _run_build(sess, source, message, image_bytes, budget, use_ai,
-                                prev_plan=None, feedback=None, prompt=prompt)
+            if image_bytes is not None:
+                _write_session_image(sess["id"], image_bytes)
+            report = _build(sess, source if not prior_image else "image", message,
+                            image_bytes or prior_image, budget, use_ai,
+                            prev_plan=None, feedback=None, prompt=prompt, mode=mode,
+                            relief=relief, roundness=roundness, back_image=back_bytes)
             kind = "build"
         else:
-            report = _run_build(sess, "text", None, None, budget, use_ai,
-                                prev_plan=prev_plan, feedback=message,
-                                prompt=message)
+            report = _build(sess, "text", message, None, budget, use_ai,
+                            prev_plan=prev_plan, feedback=message,
+                            prompt=message, mode=mode, relief=relief, roundness=roundness)
             kind = "revision"
 
         turn = {
@@ -202,6 +285,7 @@ def chat():
             "ai_error": report.get("ai", {}).get("error"),
             "mid": report["id"],
             "has_image": image_bytes is not None,
+            "pipeline": report.get("pipeline") or "character",
             "ts": None,
         }
         sess["turns"].append(turn)
@@ -210,6 +294,9 @@ def chat():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:                             # noqa: BLE001
+        code, payload = _forge_error(e)
+        if code:
+            return _err(code, payload)
         traceback.print_exc()
         return jsonify({"error": f"Pipeline failed: {e}"}), 500
 
@@ -253,12 +340,26 @@ def generate():
         elif not text:
             return jsonify({"error": "Enter a text prompt or upload a concept image."}), 400
         use_ai = request.form.get("use_ai", "1") not in ("0", "false", "off")
-        report = _run_build(None, source, text, image_bytes, budget, use_ai,
-                            None, None, text or "(concept image)")
+        mode = request.form.get("mode", "auto")
+        relief = request.form.get("relief")
+        relief = None if relief in (None, "") else relief in ("1", "true", "on")
+        try:
+            roundness = float(request.form.get("roundness") or 0) or None
+        except ValueError:
+            roundness = None
+        back_bytes = None
+        if "back_image" in request.files and request.files["back_image"].filename:
+            back_bytes = request.files["back_image"].read() or None
+        report = _build(None, source, text, image_bytes, budget, use_ai, None, None,
+                        text or "(concept image)", mode=mode, relief=relief,
+                        roundness=roundness, back_image=back_bytes)
         return jsonify(report)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:                             # noqa: BLE001
+        code, payload = _forge_error(e)
+        if code:
+            return _err(code, payload)
         traceback.print_exc()
         return jsonify({"error": f"Pipeline failed: {e}"}), 500
 
@@ -337,11 +438,41 @@ def model_file(mid, name):
     return jsonify({"error": "not found"}), 404
 
 
+def _err(code, payload):
+    """JSON error with the headers a client needs to back off correctly."""
+    resp = jsonify(payload)
+    resp.status_code = code
+    if payload.get("retry_after"):
+        resp.headers["Retry-After"] = str(payload["retry_after"])
+    return resp
+
+
+def _forge_error(e):
+    """Translate the two expected operational failures into honest HTTP."""
+    if memguard is not None and isinstance(e, memguard.Busy):
+        return 429, {"error": str(e), "busy": True, "retry_after": e.retry_after}
+    if isinstance(e, (MemoryError,)) or "Allocating" in str(e) or "memory" in str(e).lower():
+        log.error("out of memory during build: %s", e)
+        return 503, {"error": "That build needed more memory than this free instance has "
+                              "(512 MB). Try a smaller texture size or a lower polygon "
+                              "budget, or move the service to a Starter plan.",
+                     "memory": memguard.status() if memguard else None}
+    return 0, {}
+
+
+@app.errorhandler(413)
+def too_large(_e):
+    return _err(413, {"error": f"That file is over the {MAX_UPLOAD} MB limit. "
+                               f"A screenshot or a photo under {MAX_UPLOAD} MB works fine."})
+
+
 @app.route("/health")
 def health():
     return jsonify({"ok": True, "database": DB_READY, "ai": ai.available(),
                     "ai_model": ai.PRIMARY if ai.available() else None,
-                    "planner": "ai-director"})
+                    "planner": "ai-director",
+                    "modes": ["character", "sculpt", "relief"],
+                    "memory": memguard.status() if memguard else None})
 
 
 if __name__ == "__main__":

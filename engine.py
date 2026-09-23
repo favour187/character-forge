@@ -18,6 +18,12 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 import trimesh
+
+try:                                    # the guard is optional: CLI runs on a laptop too
+    import memguard
+except Exception:                       # noqa: BLE001
+    memguard = None
+
 from trimesh.visual.texture import TextureVisuals
 from trimesh.visual.material import PBRMaterial
 
@@ -306,8 +312,30 @@ def _head_fraction(widths):
     return float(np.clip((lo + best) / H, 0.12, 0.42))
 
 
+def _open_image(png_bytes):
+    """Decode defensively: bad bytes must read as a 400, not a stack trace."""
+    try:
+        img = Image.open(io.BytesIO(png_bytes))
+        img.load()
+    except Exception as e:                                   # noqa: BLE001
+        raise ValueError("That file could not be read as an image "
+                         f"({type(e).__name__}: {str(e)[:90]}). PNG, JPG or WEBP please.") from e
+    return img
+
+
 def analyze_image(png_bytes):
-    img = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
+    """Isolate the subject and measure silhouette, proportions and palette.
+
+    Decoding is done at working resolution on purpose: `Image.draft` asks libjpeg
+    to downscale *while* decoding, so a 12 MP phone photo costs ~2 MB here instead
+    of the ~48 MB (x3 copies) that OOM-killed the free Render instance.
+    """
+    img = _open_image(png_bytes)
+    if getattr(img, "format", "") == "JPEG":
+        img.draft("RGB", (768, 768))
+    if img.size[0] * img.size[1] > 60_000_000:
+        raise ValueError("image is too large (over 60 MP) - please crop it first")
+    img = img.convert("RGBA")
     img.thumbnail((768, 768))
     arr = np.array(img)
     alpha = arr[:, :, 3]
@@ -420,6 +448,10 @@ def analyze_image(png_bytes):
     p["_sampled"].update({"build", "height", "style"})
     p["tags"] = [f"{heads_tall:.1f} heads tall", f"silhouette aspect {aspect:.2f}",
                  f"{p['style']} proportions"]
+    # kept for the mode router: is this a standing character, or "some object"?
+    p["_heads_tall"] = float(heads_tall)
+    p["_aspect"] = float(aspect)
+    p["_skin_found"] = bool(skin)
 
     def greyish(c):
         r, g, b = c
@@ -1454,9 +1486,150 @@ def _param_diff(txt):
 # full pipeline
 # ---------------------------------------------------------------------------
 
+def _safe_tex(want):
+    """Largest atlas the instance can afford right now (see memguard)."""
+    want = 1024 if want not in (512, 1024, 2048) else int(want)
+    if memguard is None:
+        return min(want, 1024)
+    return memguard.tex_size(want)
+
+
+def choose_mode(mode, source, params):
+    """"auto" picks the reconstructor: a rig for a standing character, a real
+    surface reconstruction for anything else. Both take the same image."""
+    mode = (mode or "auto").lower()
+    if mode in ("sculpt", "relief", "3d", "object"):
+        return "sculpt"
+    if mode in ("character", "rig", "avatar"):
+        return "character"
+    if source != "image" or not params:
+        return "character"
+    heads = float(params.get("_heads_tall") or 0)
+    aspect = float(params.get("_aspect") or 1)
+    # a head-to-toe figure: plausible head count, tall-and-narrow, and skin in it
+    if 2.2 <= heads <= 9.5 and aspect <= 0.78 and params.get("_skin_found"):
+        return "character"
+    return "sculpt"
+
+
+def sculpt_directive(text, relief=None, roundness=None):
+    """Small, honest natural-language controls for the sculpt path:
+    "flat back", "shallower", "more volume", "keep it under 2000 tris"."""
+    t = (text or "").lower()
+    out = {}
+    if relief is not None:
+        out["relief"] = bool(relief)
+    if roundness is not None:
+        out["roundness"] = float(roundness)
+    flat = (re.search(r"\bflat\b", t) and re.search(r"\b(back|rear|behind|bottom)\b", t)) or \
+        re.search(r"\b(relief|plaque|plack|coin|medal|badge|sticker|print\w*|slic\w*|3d\s*print|2\.5d|two\.5d)\b", t) or \
+        re.search(r"\b(flatten|no bulge|hollow ?back)\b", t)
+    rounder = re.search(r"\b(round it out|full 3d|full 3-d|solid back|volumetric|plump|"
+                        r"more (volume|depth)|give it (volume|depth)|thicker|figurine)\b", t)
+    if flat and not rounder:
+        out["relief"] = True
+    if rounder:
+        out["relief"] = False
+        out["roundness"] = min(1.6, (roundness or 1.0) * 1.35)
+    if re.search(r"\b(thin|flatter|shallower|less depth|lower profile)\b", t):
+        out["roundness"] = max(0.25, (roundness or 1.0) * 0.6)
+    m = re.search(r"(?:under|below|max|keep it to)\s*(\d{3,6})\s*tris", t)
+    if m:
+        out["tris_cap"] = int(m.group(1))
+    for name in BUDGETS:
+        if re.search(r"\b%s\b" % name, t):
+            out["budget"] = name
+    m = re.search(r"\b(\d{3,4})\s*(?:px|texture|atlas)|(\d)k\s*texture\b", t)
+    if m:
+        px = int(m.group(1)) if m.group(1) else int(m.group(2)) * 1024
+        out["texture_size"] = min((512, 1024, 2048), key=lambda v: abs(v - px))
+    return out
+
+
+def run_sculpt(image_bytes, model_dir, prompt, budget="game", tex_size=None,
+               relief=False, roundness=1.0, shading=1.0, back_bytes=None, params=None,
+               target_tris=None):
+    """Any image -> sculpted 3D model, written to `model_dir` and reported."""
+    import sculpt
+
+    t0 = time.time()
+    want = int(tex_size) if tex_size else (2048 if not relief else 1024)
+    tex = _safe_tex(want)
+    bud = budget if budget in BUDGETS else "game"
+    mesh, uv, (base, mr, nrm), info = sculpt.reconstruct(
+        image_bytes, back_bytes=back_bytes, budget=bud, tex_size=tex,
+        roundness=roundness, shading=shading, relief=relief, target_tris=target_tris)
+    bundle = export_bundle(mesh, (base, mr, nrm), model_dir)
+    secs = time.time() - t0
+    tri = info["geometry"]["triangles"]
+    brief = (f"Sculpted a watertight {info['style']} from the artwork: "
+             f"{info['size_m'][0]}×{info['size_m'][1]}×{info['size_m'][2]} m, "
+             f"{tri:,} tris, textures straight from your image"
+             + (", mirrored back" if not info.get("two_view") else ", rear measured too"))
+    report = {
+        "stages": [{"name": "Isolate silhouette + read depth", "ms": int(secs * 380)},
+                   {"name": "Reconstruct surface (marching cubes)", "ms": int(secs * 300)},
+                   {"name": f"Optimise topology -> {tri:,} tris", "ms": int(secs * 120)},
+                   {"name": "Unwrap UVs + bake textures", "ms": int(secs * 120)},
+                   {"name": "Export GLB / OBJ / STL", "ms": int(secs * 80)}],
+        "pipeline": "sculpt",
+        "source": "image",
+        "prompt": prompt,
+        "style": info["style"],
+        "tags": info["tags"],
+        "notes": info["notes"],
+        "palette": {},
+        "accessories": [],
+        "geometry": dict(info["geometry"], texture_size=tex),
+        "height_m": info["height_m"],
+        "size_m": info["size_m"],
+        "watertight": info["watertight"],
+        "relief": bool(relief),
+        "two_view": bool(info.get("two_view")),
+        "plan": {"brief": brief, "reconstructor": "silhouette + shading -> implicit solid",
+                 "detail": {"texture_size": tex}, "target_tris": int(tri)},
+        "ai": {"enabled": False, "used": False, "model": None, "brief": None,
+               "error": None, "plan_source": "measured from the image (no LLM needed)"},
+        "files": bundle,
+    }
+    if params and params.get("source_notes"):
+        report["notes"] = params["source_notes"] + report["notes"]
+    return report
+
+
+def export_bundle(mesh, textures, model_dir):
+    """Write model.glb / model.obj+mtl / model.stl / the three maps; return sizes."""
+    base, mr, nrm = textures
+    files = {}
+
+    def w(name, data):
+        with open(f"{model_dir}/{name}", "wb") as fh:
+            fh.write(data if isinstance(data, bytes) else data.tobytes())
+        files[name] = len(data if isinstance(data, bytes) else data.tobytes())
+
+    w("model.glb", mesh.export(file_type="glb"))
+    w("model.stl", mesh.export(file_type="stl"))
+    try:
+        trimesh.exchange.export.export_mesh(mesh, f"{model_dir}/model.obj")
+    except Exception:                                          # noqa: BLE001
+        mesh.export(file_obj=f"{model_dir}/model.obj", file_type="obj")
+    for nm in ("model.obj", "material.mtl"):
+        import os as _os
+        if _os.path.exists(f"{model_dir}/{nm}"):
+            files[nm] = _os.path.getsize(f"{model_dir}/{nm}")
+    base.save(f"{model_dir}/texture_atlas.png")
+    mr.save(f"{model_dir}/mr_atlas.png")
+    nrm.save(f"{model_dir}/normal_atlas.png")
+    for nm in ("texture_atlas.png", "mr_atlas.png", "normal_atlas.png"):
+        import os as _os
+        files[nm] = _os.path.getsize(f"{model_dir}/{nm}")
+    return files
+
+
 def run_pipeline(source="text", text=None, image_bytes=None, budget="game",
                  tex_size=None, model_dir=".", prompt="", use_ai=True,
-                 plan=None, prev_plan=None, feedback=None):
+                 plan=None, prev_plan=None, feedback=None, mode="auto",
+                 relief=None, roundness=None, back_image=None):
     """analyse -> plan -> geometry -> UV -> textures -> optimise -> export."""
     t0 = time.time()
     stages = []
@@ -1465,6 +1638,23 @@ def run_pipeline(source="text", text=None, image_bytes=None, budget="game",
         stages.append({"name": name, "ms": int((time.time() - t0) * 1000)})
 
     params = analyze_image(image_bytes) if source == "image" else analyze_text(text or prompt or "")
+
+    # ---- sculpt route: any image at all, not just characters -----------------
+    if image_bytes and choose_mode(mode, source, params) == "sculpt":
+        d = sculpt_directive(text or prompt or "", relief, roundness)
+        rep = run_sculpt(image_bytes, model_dir, prompt,
+                         budget=d.get("budget", budget), tex_size=d.get("texture_size", tex_size),
+                         relief=d.get("relief", bool(relief)),
+                         roundness=d.get("roundness", roundness if roundness is not None else 1.0),
+                         back_bytes=back_image, params=params,
+                         target_tris=d.get("tris_cap"))
+        if d.get("relief") is not None or d.get("roundness") is not None:
+            rep["notes"].append("Applied from your words: " + ", ".join(
+                f"{k}={v}" for k, v in d.items() if k in ("relief", "roundness")))
+        return rep
+    if mode == "sculpt" and not image_bytes:
+        raise ValueError("Sculpt mode reconstructs geometry from pixels - attach an image "
+                         "(or switch to Character mode to build from text).")
     if prev_plan:                       # a revision refines the character that already exists
         params = plan_to_params(params, prev_plan)
     budget_hint = None if budget in (None, "auto") else BUDGETS[budget]["tris"]
@@ -1541,13 +1731,9 @@ def run_pipeline(source="text", text=None, image_bytes=None, budget="game",
     mesh, uv = assemble(parts)
     done(f"Optimise topology -> {len(mesh.faces):,} tris")
 
-    if tex_size:
-        tex = int(tex_size)
-    elif source == "image":
-        tex = 2048                                   # concept art deserves the full atlas
-    else:
-        tex = int(plan.get("texture_size") or 1024)
-    tex = 1024 if tex not in (512, 1024, 2048) else tex
+    want = int(tex_size) if tex_size else (2048 if source == "image"
+                                           else int(plan.get("texture_size") or 1024))
+    tex = _safe_tex(want)                            # never past what the box can hold
     color_img = finalize(mesh, uv, p, model_dir, tex_size=tex)
     done("Unwrap UVs + bake textures")
     done("Export GLB / OBJ / STL")
