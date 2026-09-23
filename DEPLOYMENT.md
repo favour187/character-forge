@@ -81,3 +81,10 @@ The tokens were shared in chat; rotate them when convenient (GitHub → Settings
   skies and HUD clutter in game screenshots are handled far better.
 * **Textures**: low-frequency normals (the raw Sobel grain read as noisy skin), cheek blush on
   chibi/stylized text builds.
+* **Memory fix**: the 2048² atlas paint pass now runs float32 end-to-end and builds the normal
+  map directly into the uint8 buffer — the original float64 + float-stack version spiked past
+  the 512 MB free instance and OOM-killed the worker (502 on every request). Peak RSS is now
+  ~307 MB for a full high-budget image build.
+* **Verified live** with the shared Neon DB attached: `POST /chat` image build (15,015 tris,
+  2048², persisted `true`), text build (5,470 tris, persisted `true`), `/recent`
+  `persistent: true`, `all.zip` downloads.
