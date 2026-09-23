@@ -1,0 +1,11 @@
+# Optional GPU neural image-to-3D backend.
+torch
+torchvision
+transformers
+omegaconf
+einops
+huggingface_hub
+rembg
+xatlas
+git+https://github.com/tatsy/torchmcubes.git
+git+https://github.com/VAST-AI-Research/TripoSR.git
