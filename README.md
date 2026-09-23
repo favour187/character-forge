@@ -1,5 +1,8 @@
 # Character Forge
 
+**Live:** https://character-forge.onrender.com · **Code:** https://github.com/favour187/character-forge
+
+
 A self-contained **text / concept-image → game-ready 3D character** tool.
 It implements the exact pipeline you described — analyze → reconstruct → UV →
 texture → optimize → export — as runnable code, with a web UI, a live PBR
