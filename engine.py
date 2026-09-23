@@ -1639,6 +1639,58 @@ def run_pipeline(source="text", text=None, image_bytes=None, budget="game",
 
     params = analyze_image(image_bytes) if source == "image" else analyze_text(text or prompt or "")
 
+    # ---- neural 3D route -----------------------------------------------------
+    # Image builds use a learned 3D reconstruction model when its optional
+    # dependencies are installed. This is the real image->mesh path; the CPU
+    # sculpt reconstructor remains the safe fallback for lightweight hosts.
+    if image_bytes and str(mode or "auto").lower() in ("auto", "3d", "neural", "triposr"):
+        try:
+            import neural3d
+            if neural3d.available():
+                out_path = os.path.join(model_dir, "model.glb")
+                neural = neural3d.generate(image_bytes, out_path, back_bytes=back_image)
+                report = {
+                    "stages": [
+                        {"name": "Prepare reference image", "ms": int((time.time() - t0) * 1000)},
+                        {"name": "Neural 3D reconstruction (TripoSR)", "ms": neural["inference_ms"]},
+                        {"name": "Validate and normalize mesh", "ms": int((time.time() - t0) * 1000)},
+                        {"name": "Export GLB", "ms": int((time.time() - t0) * 1000)},
+                    ],
+                    "pipeline": neural["pipeline"],
+                    "source": "image",
+                    "prompt": prompt,
+                    "style": "neural reconstruction",
+                    "tags": ["single-image neural 3D", "learned geometry"],
+                    "notes": [neural["note"]],
+                    "palette": {},
+                    "accessories": [],
+                    "geometry": neural["geometry"],
+                    "plan": {
+                        "brief": "Generated a genuine 3D mesh from the reference image using a learned reconstruction model.",
+                        "reconstructor": "TripoSR",
+                        "target_tris": neural["geometry"]["triangles"],
+                    },
+                    "ai": {
+                        "enabled": True,
+                        "used": True,
+                        "model": neural["model"],
+                        "brief": "Neural geometry reconstruction",
+                        "error": None,
+                        "plan_source": "neural 3D model",
+                    },
+                    "device": neural["device"],
+                    "two_view": False,
+                }
+                return report
+        except Exception as e:
+            # Explicit neural mode must not silently produce a different kind of
+            # asset. Auto mode may fall back to the existing CPU reconstructor.
+            if str(mode or "auto").lower() in ("3d", "neural", "triposr"):
+                raise
+            params.setdefault("source_notes", []).append(
+                "Neural 3D backend unavailable; used the existing CPU reconstruction fallback."
+            )
+
     # ---- sculpt route: any image at all, not just characters -----------------
     if image_bytes and choose_mode(mode, source, params) == "sculpt":
         d = sculpt_directive(text or prompt or "", relief, roundness)
