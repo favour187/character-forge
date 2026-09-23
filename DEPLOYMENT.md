@@ -54,3 +54,17 @@ The schema is created on first boot (`db.init()`); `/health` then reports `"data
 ## Secrets
 Kept **only** in `forge/.env` (git-ignored, chmod 600) in this workspace — never committed.
 The tokens were shared in chat; rotate them when convenient (GitHub → Settings → Developer settings; Render → Account → API keys).
+
+## Chat UI + AI director (latest)
+
+* `GET /` is now a chat. One turn = one build; following text-only turns revise the same character
+  (the session keeps `last_plan`, stored in `sessions/<id>.json` next to `models/<mid>/`).
+* `director.py` = the planning stage (LLM → validated build plan: proportions, features, palette,
+  materials, **target_tris**, texture size, detail resolution, `back_view`, `extra_parts`).
+  Falls back to `engine.local_plan` / `local_revise` when the model is unavailable.
+* Downloads: `GET /download/<mid>/{model.glb|obj.zip|model.stl|all.zip|report.json|*.png}`.
+  Use these links outside the in-app preview iframe — the iframe blocks downloads by design.
+* Env additions: `FORGE_PLAN_TIMEOUT_S=60`, `FORGE_PLAN_BUDGET_S=150`, `FORGE_PLAN_MAX_TOKENS=8000`
+  (free models spend ~2.5k tokens thinking before the JSON, so keep max_tokens generous).
+* Free-tier per-model limit is still ~50 requests/day on the cheap models; every build needs one
+  plan call, so ~50 builds/day, then the rule planner takes over automatically.

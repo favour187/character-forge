@@ -3,200 +3,213 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Character Forge — text / image → game-ready 3D</title>
+<title>Character Forge — talk your way to a 3D character</title>
 <style>
   :root{
-    --bg:#0d0f14; --panel:#151923; --panel2:#1c2130; --line:#262d3d;
-    --text:#e6e9f0; --muted:#8a93a8; --accent:#7c6cff; --accent2:#3ddc97;
-    --warn:#ffb454; --danger:#ff6b6b; --radius:14px;
+    --bg:#0b0d14; --bg2:#11141f; --panel:#151a27; --panel2:#1b2130; --line:#252c3d;
+    --text:#e9ecf5; --muted:#8c95ad; --accent:#6f7cff; --accent2:#37d6a0;
+    --warn:#f5b544; --user:#223055; --radius:16px;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
-  header{display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#141827,#0f1320)}
-  header .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#4bd3ff);display:grid;place-items:center;font-weight:800;color:#fff}
-  header h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
-  header p{margin:0;color:var(--muted);font-size:12px}
-  main{flex:1;display:grid;grid-template-columns:330px 1fr 330px;min-height:0}
-  aside{background:var(--panel);border-right:1px solid var(--line);padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
-  aside.right{border-right:0;border-left:1px solid var(--line)}
-  h2{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;font-weight:700}
-  .card{background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
-  textarea{width:100%;min-height:96px;resize:vertical;background:#0f131c;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit;outline:none}
-  textarea:focus{border-color:var(--accent)}
-  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-  .chip{font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--line);background:#11151f;color:var(--muted);cursor:pointer}
-  .chip:hover{border-color:var(--accent);color:var(--text)}
-  .drop{border:1.5px dashed #33405a;border-radius:10px;padding:14px;text-align:center;color:var(--muted);cursor:pointer;transition:.15s;position:relative;min-height:88px;display:grid;place-items:center}
-  .drop.over,.drop:hover{border-color:var(--accent);color:var(--text);background:#141a29}
-  .drop img{max-height:150px;max-width:100%;border-radius:8px}
-  .drop .clear{position:absolute;top:6px;right:8px;font-size:11px;color:var(--danger);cursor:pointer;background:#0f131c;padding:2px 7px;border-radius:6px}
-  select,button{font:inherit}
-  select{width:100%;background:#0f131c;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 10px}
-  .row{display:flex;gap:8px;align-items:center}
-  .row > *{flex:1}
-  button.primary{width:100%;padding:12px;border:0;border-radius:12px;background:linear-gradient(135deg,var(--accent),#5b8cff);color:#fff;font-weight:700;cursor:pointer;letter-spacing:.2px;box-shadow:0 6px 20px rgba(124,108,255,.25)}
-  button.primary:disabled{opacity:.55;cursor:progress}
-  .stages{display:flex;flex-direction:column;gap:7px}
-  .stage{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:#11151f;border:1px solid var(--line);font-size:13px}
-  .stage .dot{width:9px;height:9px;border-radius:50%;background:#2c3446;flex:none}
-  .stage.active .dot{background:var(--warn);box-shadow:0 0 0 4px rgba(255,180,84,.18);animation:pulse 1s infinite}
-  .stage.done .dot{background:var(--accent2)}
-  .stage .ms{margin-left:auto;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
-  @keyframes pulse{50%{opacity:.5}}
-  #viewport{position:relative;background:radial-gradient(1200px 700px at 50% 30%,#1a2033 0%,#0b0d12 70%)}
-  #viewport canvas{display:block;width:100%;height:100%}
-  .overlay{position:absolute;left:16px;top:14px;display:flex;gap:8px;flex-wrap:wrap}
-  .tog{background:rgba(20,24,36,.85);border:1px solid var(--line);color:var(--text);padding:6px 10px;border-radius:9px;cursor:pointer;font-size:12px;backdrop-filter:blur(6px)}
-  .tog.on{border-color:var(--accent);color:#fff;background:rgba(124,108,255,.28)}
-  .empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--muted);pointer-events:none}
-  .empty b{display:block;color:var(--text);font-size:18px;margin-bottom:6px}
-  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .stat{background:#11151f;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
-  .stat b{display:block;font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
-  .stat span{font-size:11px;color:var(--muted)}
-  .swatches{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-  .sw{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
-  .sw i{width:18px;height:18px;border-radius:6px;border:1px solid rgba(255,255,255,.12);flex:none}
-  .tags{display:flex;flex-wrap:wrap;gap:6px}
-  .brief{background:linear-gradient(135deg,rgba(124,108,255,.14),rgba(75,211,255,.08));border:1px solid rgba(124,108,255,.35);border-radius:10px;padding:9px 11px;font-size:12.5px;line-height:1.45;margin-bottom:10px}
-  .brief .who{display:block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#b9b1ff;margin-bottom:3px}
-  .brief.off{border-color:rgba(255,180,84,.35);background:rgba(255,180,84,.08)} .brief.off .who{color:var(--warn)}
-  .tag{font-size:11px;padding:3px 8px;border-radius:999px;background:rgba(61,220,151,.12);color:var(--accent2);border:1px solid rgba(61,220,151,.25)}
-  ul.notes{margin:0;padding-left:16px;color:var(--muted);font-size:12px}
-  .dl{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .dl a{display:block;text-align:center;padding:9px;border-radius:10px;border:1px solid var(--line);background:#11151f;color:var(--text);text-decoration:none;font-weight:600;font-size:13px}
-  .dl a:hover{border-color:var(--accent)}
-  .dl a small{display:block;font-weight:400;color:var(--muted);font-size:10px}
-  .atlas{width:100%;border-radius:10px;border:1px solid var(--line);image-rendering:auto;display:block}
-  .atlas-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
-  .atlas-row figure{margin:0}
-  .atlas-row figcaption{font-size:10px;color:var(--muted);text-align:center;margin-top:3px}
-  pre{background:#0f131c;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:11px;overflow:auto;color:#c9d1e3;margin:0}
-  .error{background:rgba(255,107,107,.12);border:1px solid rgba(255,107,107,.35);color:#ffb3b3;border-radius:10px;padding:10px;font-size:12px;display:none}
-  .muted{color:var(--muted);font-size:12px}
-  .recent{display:flex;flex-direction:column;gap:6px}
-  .recent .item{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:9px;background:#11151f;border:1px solid var(--line);cursor:pointer;font-size:12px}
-  .recent .item:hover{border-color:var(--accent)}
-  .recent .item .p{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .recent .item .m{color:var(--muted);font-size:10px;white-space:nowrap}
-  .recent .item .s{font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(124,108,255,.18);color:#b9b1ff;white-space:nowrap}
-  .hidden{display:none !important}
+  html,body{height:100%}
+  body{margin:0;background:radial-gradient(1200px 700px at 80% -10%,#1b2340 0%,transparent 60%),var(--bg);
+       color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+  a{color:var(--accent);text-decoration:none}
+  button{font:inherit;color:inherit;cursor:pointer}
+  .app{display:grid;grid-template-columns:minmax(420px,1fr) minmax(360px,42%);height:100vh}
+
+  /* ── header ────────────────────────────────────────────── */
+  header{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line);
+         background:rgba(11,13,20,.82);backdrop-filter:blur(8px)}
+  .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+        display:grid;place-items:center;font-size:16px}
+  h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
+  .sub{font-size:11.5px;color:var(--muted)}
+  .spacer{flex:1}
+  .hbtn{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:7px 11px;font-size:12.5px}
+  .hbtn:hover{border-color:#3a4560;background:var(--panel2)}
+  .hbtn.on{border-color:var(--accent);color:#cfd6ff}
+
+  /* ── iframe / download banner ──────────────────────────── */
+  #frameNote{display:none;gap:10px;align-items:center;padding:9px 18px;font-size:12.5px;
+             background:rgba(245,181,68,.1);border-bottom:1px solid rgba(245,181,68,.3);color:#f7cd83}
+  #frameNote b{color:#ffd894}
+
+  /* ── chat column ───────────────────────────────────────── */
+  .chatwrap{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line)}
+  #thread{flex:1;overflow-y:auto;padding:20px 18px 8px;scroll-behavior:smooth}
+  .row{display:flex;gap:11px;margin-bottom:18px;align-items:flex-start}
+  .row.me{flex-direction:row-reverse}
+  .av{width:30px;height:30px;border-radius:9px;flex:0 0 30px;display:grid;place-items:center;font-size:15px;
+      background:linear-gradient(135deg,#2a3358,#1d2436);border:1px solid var(--line)}
+  .row.me .av{background:linear-gradient(135deg,#3b4a86,#25305a)}
+  .bub{max-width:min(92%,760px);background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+       padding:13px 15px}
+  .row.me .bub{background:var(--user);border-color:#2f3f6d}
+  .bub p{margin:0 0 9px}
+  .bub p:last-child{margin-bottom:0}
+  .who{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin-bottom:6px}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:#c7cfe8;background:#1a2133;
+        border:1px solid var(--line);border-radius:999px;padding:3px 9px;margin:0 6px 6px 0}
+  .chip.ai{border-color:#3a4b8f;color:#bcc7ff}
+  .chip.warn{border-color:#6b5326;color:#f0c577}
+  .chip.ok{border-color:#2c5a48;color:#8fe3c2}
+  .stats{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 4px}
+  .stat{background:#10141f;border:1px solid var(--line);border-radius:11px;padding:7px 11px;min-width:84px}
+  .stat b{display:block;font-size:15px}
+  .stat span{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+  details{border:1px solid var(--line);border-radius:12px;background:#10141f;margin:9px 0}
+  details>summary{cursor:pointer;padding:9px 12px;font-size:12.5px;color:#c3cbe4;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary:before{content:"▸ ";color:var(--muted)}
+  details[open]>summary:before{content:"▾ "}
+  .dbody{padding:2px 13px 12px;font-size:13px;color:#cfd6e8}
+  .kv{display:grid;grid-template-columns:132px 1fr;gap:4px 10px;font-size:12.7px}
+  .kv div:nth-child(odd){color:var(--muted)}
+  .swatches{display:flex;flex-wrap:wrap;gap:7px;margin:7px 0}
+  .sw{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);
+      background:#0e121c;border:1px solid var(--line);border-radius:8px;padding:3px 7px}
+  .sw i{width:13px;height:13px;border-radius:4px;display:block;border:1px solid #00000055}
+  ul.tight{margin:6px 0 0 16px;padding:0}
+  ul.tight li{margin:3px 0;font-size:12.7px;color:#c8d0e4}
+  .stages{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .stage{font-size:11px;color:var(--muted);background:#0e121c;border:1px solid var(--line);
+         border-radius:8px;padding:3px 8px;font-family:var(--mono)}
+  .stage.done{color:#9fe6c7;border-color:#25493c}
+  .atlas{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .atlas figure{margin:0;width:104px}
+  .atlas img{width:104px;height:104px;object-fit:cover;border-radius:9px;border:1px solid var(--line);
+             background:#0a0d14;image-rendering:pixelated}
+  .atlas figcaption{font-size:10.5px;color:var(--muted);margin-top:3px;text-align:center}
+  .acts{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px;align-items:center}
+  .dl{display:inline-flex;align-items:center;gap:6px;background:#1d2436;
+      border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-size:12.5px;color:#dfe5f7}
+  .dl:hover{border-color:var(--accent);color:#fff}
+  .dl.primary{background:linear-gradient(135deg,#39459c,#2b3576);border-color:#4a58bd;color:#fff;font-weight:600}
+  .dl small{color:var(--muted);font-weight:400}
+  .mini{font-size:11.5px;background:transparent;border:1px dashed var(--line);border-radius:8px;
+        padding:6px 9px;color:var(--muted)}
+  .mini:hover{color:#dfe5f7;border-color:#3a4560}
+  .typing{display:flex;gap:5px;align-items:center;color:var(--muted);font-size:12.5px}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:b 1.1s infinite}
+  .dot:nth-child(2){animation-delay:.18s}.dot:nth-child(3){animation-delay:.36s}
+  @keyframes b{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+  .err{color:#ffb3b3;background:rgba(255,80,80,.08);border:1px solid rgba(255,80,80,.3);
+       border-radius:10px;padding:8px 11px;font-size:12.7px}
+
+  /* ── composer ──────────────────────────────────────────── */
+  .composer{border-top:1px solid var(--line);background:rgba(11,13,20,.9);padding:11px 18px 14px}
+  .sug{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
+  .sug button{font-size:12px;background:#141a29;border:1px solid var(--line);border-radius:999px;
+              padding:5px 11px;color:#c5cde6}
+  .sug button:hover{border-color:var(--accent)}
+  .box{display:flex;gap:9px;align-items:flex-end;background:var(--panel);border:1px solid var(--line);
+       border-radius:var(--radius);padding:9px 10px}
+  .box.over{border-color:var(--accent);background:#1a2036}
+  textarea{flex:1;background:transparent;border:0;color:var(--text);font:inherit;resize:none;outline:none;
+           max-height:132px;min-height:24px}
+  .tool{border:1px solid var(--line);background:#161c2b;border-radius:10px;width:36px;height:36px;
+        display:grid;place-items:center;font-size:15px}
+  .tool:hover{border-color:var(--accent)}
+  .send{background:linear-gradient(135deg,var(--accent),#4d5ad6);border:0;border-radius:10px;
+        width:auto;padding:0 15px;height:36px;font-weight:600;color:#fff}
+  .send:disabled{opacity:.55;cursor:default}
+  .thumb{position:relative;margin-bottom:9px;display:none}
+  .thumb img{height:72px;border-radius:10px;border:1px solid var(--line)}
+  .thumb button{position:absolute;top:-7px;left:64px;background:#232a3d;border:1px solid var(--line);
+                border-radius:50%;width:22px;height:22px;line-height:1}
+  .opts{display:flex;gap:12px;align-items:center;margin-top:9px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  select{background:#161c2b;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:5px 8px;font:inherit;font-size:12.5px}
+  label.cb{display:flex;gap:6px;align-items:center;cursor:pointer}
+
+  /* ── viewer column ─────────────────────────────────────── */
+  .viewer{position:relative;background:#080a11;min-height:0;display:flex;flex-direction:column}
+  #canvasWrap{flex:1;position:relative;min-height:0}
+  canvas{display:block;width:100%;height:100%}
+  .vtools{position:absolute;top:12px;left:12px;display:flex;gap:6px;flex-wrap:wrap;z-index:3}
+  .tt{font-size:11.5px;background:rgba(20,26,41,.86);border:1px solid var(--line);border-radius:9px;
+      padding:5px 9px;color:#c3cbe4}
+  .tt.on{border-color:var(--accent);color:#fff;background:rgba(60,72,160,.5)}
+  .vhint{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--muted);
+         font-size:13px;padding:24px;pointer-events:none}
+  .vmeta{position:absolute;right:12px;bottom:12px;font-size:11px;color:var(--muted);font-family:var(--mono);
+         background:rgba(10,13,20,.7);border:1px solid var(--line);border-radius:9px;padding:6px 9px;z-index:3;max-width:60%}
+  .vhead{padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:9px;
+         background:rgba(11,13,20,.7);font-size:12.5px;color:var(--muted)}
+  @media (max-width:980px){
+    .app{grid-template-columns:1fr;grid-template-rows:1fr 44vh}
+    .chatwrap{border-right:0;border-bottom:1px solid var(--line)}
+  }
 </style>
 </head>
 <body>
-<header>
-  <div class="logo">⬢</div>
-  <div>
-    <h1>Character Forge</h1>
-    <p>Text or concept image → analysis → mesh → UVs → PBR textures → game topology → Unity-ready GLB/OBJ</p>
+<div class="app">
+  <div class="chatwrap">
+    <header>
+      <div class="logo">⚒</div>
+      <div>
+        <h1>Character Forge</h1>
+        <div class="sub">concept → AI build plan → game-ready mesh, textures &amp; exports</div>
+      </div>
+      <div class="spacer"></div>
+      <button class="hbtn" id="recentBtn">Recent</button>
+      <button class="hbtn" id="newBtn">New chat</button>
+    </header>
+    <div id="frameNote" style="display:none">
+      <span>⚠</span>
+      <div>You are viewing this inside an embedded frame, which blocks file downloads. <b>Open in a new tab</b> to save the GLB, or use “copy link” on any download button.</div>
+      <div class="spacer"></div>
+      <button class="hbtn" id="openTab">Open in new tab ↗</button>
+    </div>
+
+    <div id="thread"></div>
+
+    <div class="composer">
+      <div class="sug" id="sug"></div>
+      <div class="thumb" id="thumb"><img id="thumbImg" alt=""><button id="thumbX" title="remove">×</button></div>
+      <div class="box" id="box">
+        <button class="tool" id="attach" title="Attach a concept image">🖼</button>
+        <textarea id="msg" rows="1" placeholder="Describe a character… or say “make the cape red”, “add wings”, “keep it under 3000 tris”"></textarea>
+        <button class="send" id="send">Send</button>
+      </div>
+      <div class="opts">
+        <label class="cb"><input type="checkbox" id="useAi" checked> AI director</label>
+        <span id="aiState">…</span>
+        <div class="spacer" style="flex:1"></div>
+        <label>poly budget
+          <select id="budget">
+            <option value="auto" selected>let the AI decide</option>
+            <option value="mobile">mobile · ≤1.5k tris</option>
+            <option value="game">game · ≤5k tris</option>
+            <option value="high">high detail · ≤15k tris</option>
+          </select>
+        </label>
+      </div>
+      <input type="file" id="file" accept="image/*" hidden>
+    </div>
   </div>
-</header>
 
-<main>
-  <!-- ───────────── left: input ───────────── -->
-  <aside>
-    <div class="card">
-      <h2>1 · Input</h2>
-      <textarea id="prompt" placeholder="Describe the character… e.g. A stylized fantasy school student wearing a backpack, purple robe, pointed hat"></textarea>
-      <div class="chips" id="chips">
-        <span class="chip">fantasy school student with backpack, purple robe</span>
-        <span class="chip">chibi cat-girl mage with staff and pointy hat</span>
-        <span class="chip">muscular orc warrior, sword and shield, red armor</span>
-        <span class="chip">tall elf ranger, green cloak, brown boots</span>
-        <span class="chip">demon knight with horns, black cape, silver armor</span>
+  <div class="viewer">
+    <div class="vhead"><span id="vTitle">Viewer — nothing built yet</span></div>
+    <div id="canvasWrap">
+      <div class="vtools">
+        <button class="tt on" data-view="lit">Material</button>
+        <button class="tt" data-view="wire">Wireframe</button>
+        <button class="tt" data-view="normal">Normals</button>
+        <button class="tt" data-view="uv">UVs</button>
+        <button class="tt on" id="spin">Auto-spin</button>
       </div>
-      <div style="height:10px"></div>
-      <div class="drop" id="drop">
-        <input type="file" id="file" accept="image/*" hidden>
-        <div id="dropText">…or drop a <b>concept image</b> (PNG/JPG)<br><span class="muted">a transparent PNG or clean background works best</span></div>
-        <img id="preview" class="hidden" alt="">
-        <span class="clear hidden" id="clear">✕ remove</span>
-      </div>
-      <div style="height:10px"></div>
-      <div class="row">
-        <select id="budget" title="Polygon budget / topology target">
-          <option value="mobile">Mobile · ≤1.5k tris</option>
-          <option value="game" selected>Game · ≤5k tris</option>
-          <option value="high">Hero · ≤15k tris</option>
-        </select>
-      </div>
-      <div style="height:10px"></div>
-      <label class="row" style="gap:8px;font-size:12px;color:var(--muted);cursor:pointer;align-items:center">
-        <input type="checkbox" id="useAi" checked style="flex:none;width:15px;height:15px;accent-color:var(--accent)">
-        <span style="flex:1">AI analysis via OpenRouter <span id="aiState" class="muted">(checking…)</span></span>
-      </label>
-      <div style="height:10px"></div>
-      <button class="primary" id="go">⚡ Generate 3D character</button>
-      <div style="height:8px"></div>
-      <div class="error" id="err"></div>
+      <div class="vhint" id="vhint">Send a description or drop a concept image →<br>the AI plans the character, the engine builds it.</div>
+      <div class="vmeta" id="vmeta"></div>
     </div>
-
-    <div class="card">
-      <h2>Pipeline</h2>
-      <div class="stages" id="stages">
-        <div class="stage" data-i="0"><span class="dot"></span>AI analyzes input<span class="ms"></span></div>
-        <div class="stage" data-i="1"><span class="dot"></span>Reconstruct geometry (mesh)<span class="ms"></span></div>
-        <div class="stage" data-i="2"><span class="dot"></span>Optimize to game topology<span class="ms"></span></div>
-        <div class="stage" data-i="3"><span class="dot"></span>UV unwrap + bake PBR textures<span class="ms"></span></div>
-        <div class="stage" data-i="4"><span class="dot"></span>Export GLB / OBJ / STL<span class="ms"></span></div>
-      </div>
-    </div>
-  </aside>
-
-  <!-- ───────────── center: 3D viewport ───────────── -->
-  <section id="viewport">
-    <div class="overlay">
-      <button class="tog on" data-view="lit">Lit (PBR)</button>
-      <button class="tog" data-view="wire">Wireframe</button>
-      <button class="tog" data-view="normal">Normals</button>
-      <button class="tog" data-view="uv">UV check</button>
-      <button class="tog" id="spin">⟳ Auto-rotate</button>
-    </div>
-    <div class="empty" id="empty">
-      <div><b>No model yet</b>Type a description or drop a concept image, then press Generate.<br>Drag to orbit · scroll to zoom · right-drag to pan</div>
-    </div>
-  </section>
-
-  <!-- ───────────── right: report / export ───────────── -->
-  <aside class="right">
-    <div class="card">
-      <h2>2 · Analysis</h2>
-      <div id="analysis" class="muted">The analyzer output (proportions, palette, detected parts) will appear here.</div>
-    </div>
-    <div class="card">
-      <h2>3 · Geometry & materials</h2>
-      <div class="stats" id="stats"></div>
-      <div style="height:10px"></div>
-      <div class="atlas-row" id="atlases"></div>
-    </div>
-    <div class="card">
-      <h2>4 · Export</h2>
-      <div class="dl" id="dl"><span class="muted">Generate a model to enable downloads.</span></div>
-      <div style="height:10px"></div>
-      <details>
-        <summary class="muted" style="cursor:pointer">Unity import notes</summary>
-        <pre>GLB  → drop into Assets/ (Unity 2020.3+ with
-       glTFast: Window ▸ Package Manager ▸
-       + Add by name ▸ com.unity.cloud.gltfast)
-       Materials/normal/metal-rough import automatically (URP/HDRP/Built-in).
-OBJ  → native import; assign texture_atlas.png
-       to Base Map manually.
-Scale → 1 unit = 1 metre, Y-up, A-pose.
-Rig  → Model ▸ Rig ▸ Humanoid works after
-       skinning in Blender/Mixamo.</pre>
-      </details>
-    </div>
-    <div class="card">
-      <h2>Recent characters <span id="persistNote" class="muted" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
-      <div id="recent" class="recent"><span class="muted">Nothing generated yet.</span></div>
-    </div>
-  </aside>
-</main>
+  </div>
+</div>
 
 <script type="importmap">
-{ "imports": {
-  "three": "/static/vendor/three/build/three.module.js",
-  "three/addons/": "/static/vendor/three/"
+{"imports":{
+  "three":"/static/vendor/three/build/three.module.js",
+  "three/addons/":"/static/vendor/three/"
 }}
 </script>
 <script type="module">
@@ -206,231 +219,341 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 /* ───────── viewer ───────── */
-const vp = document.getElementById('viewport');
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+const wrap = document.getElementById('canvasWrap');
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:false});
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
-renderer.shadowMap.enabled = true;
-vp.appendChild(renderer.domElement);
+wrap.appendChild(renderer.domElement);
+renderer.domElement.style.width = '100%';
+renderer.domElement.style.height = '100%';
 
 const scene = new THREE.Scene();
-const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+scene.background = new THREE.Color(0x0a0d14);
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.06).texture;
 
-const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 100);
-camera.position.set(2.2, 1.5, 3.2);
+const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 100);
+camera.position.set(1.6, 1.5, 2.6);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true; controls.target.set(0, 0.9, 0);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 0.5; controls.maxDistance = 12;
+controls.target.set(0, 0.85, 0);
 
-const key = new THREE.DirectionalLight(0xffffff, 2.2);
-key.position.set(3, 5, 4); key.castShadow = true;
-key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0005;
-scene.add(key, new THREE.HemisphereLight(0xbfd3ff, 0x2a2438, 0.6));
-
-const ground = new THREE.Mesh(new THREE.CircleGeometry(2.2, 64),
-  new THREE.ShadowMaterial({ opacity: 0.35 }));
-ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-const grid = new THREE.GridHelper(4, 16, 0x2a3348, 0x1b2130); grid.position.y = 0.001; scene.add(grid);
-
-let model = null, spin = false, view = 'lit';
-const uvTex = makeUVChecker();
+const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(2.4, 4, 3); scene.add(key);
+const rim = new THREE.DirectionalLight(0x9fb4ff, 1.2); rim.position.set(-3, 2, -2.4); scene.add(rim);
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x1a1d26, 0.7));
+const grid = new THREE.GridHelper(6, 24, 0x2b3448, 0x232a3a); scene.add(grid);
 const loader = new GLTFLoader();
-
-function resize(){
-  const w = vp.clientWidth, h = vp.clientHeight;
-  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
-}
-new ResizeObserver(resize).observe(vp); resize();
-
-renderer.setAnimationLoop(() => {
-  controls.update();
-  if (model && spin) model.rotation.y += 0.005;
-  renderer.render(scene, camera);
-});
+let model = null, view = 'lit', spin = true;
+const uvTex = makeUVChecker();
 
 function makeUVChecker(){
   const c = document.createElement('canvas'); c.width = c.height = 512;
   const g = c.getContext('2d');
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++){
-    g.fillStyle = (x + y) % 2 ? '#6f7cff' : '#2b2f45'; g.fillRect(x * 64, y * 64, 64, 64);
+    g.fillStyle = (x + y) % 2 ? '#6f7cff' : '#2b2f45'; g.fillRect(x*64, y*64, 64, 64);
   }
   g.fillStyle = '#fff'; g.font = 'bold 20px monospace';
-  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) g.fillText(`${x},${y}`, x * 64 + 6, y * 64 + 26);
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) g.fillText(`${x},${y}`, x*64+6, y*64+26);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; return t;
 }
-
 function applyView(){
   if (!model) return;
   model.traverse(o => {
     if (!o.isMesh) return;
     if (!o.userData.orig) o.userData.orig = o.material;
     const orig = o.userData.orig;
-    if (view === 'lit') o.material = orig;
-    else if (view === 'wire') o.material = new THREE.MeshBasicMaterial({ color: 0x8fa3ff, wireframe: true });
+    if (view === 'lit') { o.material = orig; o.visible = true; }
+    else if (view === 'wire') o.material = new THREE.MeshBasicMaterial({color:0x8fa3ff, wireframe:true});
     else if (view === 'normal') o.material = new THREE.MeshNormalMaterial();
-    else if (view === 'uv') o.material = new THREE.MeshStandardMaterial({ map: uvTex, roughness: .8 });
+    else o.material = new THREE.MeshStandardMaterial({map: uvTex, roughness:.75});
   });
 }
-
-async function loadModel(url){
+async function loadModel(url, title){
   if (model){ scene.remove(model); model = null; }
-  const gltf = await loader.loadAsync(url);
-  model = gltf.scene;
-  model.traverse(o => { if (o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
-  const box = new THREE.Box3().setFromObject(model);
-  const size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
-  model.position.x -= ctr.x; model.position.z -= ctr.z; model.position.y -= box.min.y;
-  scene.add(model); applyView();
-  controls.target.set(0, size.y * 0.5, 0);
-  const d = Math.max(size.y * 1.7, 1.6);
-  camera.position.set(d * 0.65, size.y * 0.75, d);
-  document.getElementById('empty').classList.add('hidden');
+  try{
+    const gltf = await loader.loadAsync(url);
+    model = gltf.scene;
+    model.traverse(o => { if (o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
+    model.position.x -= ctr.x; model.position.z -= ctr.z; model.position.y -= box.min.y;
+    scene.add(model); applyView();
+    // fit the whole character in frame whatever the aspect ratio
+    const ctr2 = new THREE.Vector3(0, size.y*0.5, 0);
+    controls.target.copy(ctr2);
+    const dist = (size.y*1.16) / (2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)));
+    const dir = new THREE.Vector3(0.55, 0.28, 1).normalize();
+    camera.position.copy(ctr2).addScaledVector(dir, Math.max(dist, 0.9));
+    controls.update();
+    document.getElementById('vhint').style.display = 'none';
+    document.getElementById('vTitle').textContent = title || 'Viewer';
+    document.getElementById('vmeta').textContent = `height ${size.y.toFixed(2)} m`;
+  }catch(e){
+    document.getElementById('vmeta').textContent = 'preview failed: ' + e.message;
+  }
 }
-
-document.querySelectorAll('.tog[data-view]').forEach(b => b.onclick = () => {
-  document.querySelectorAll('.tog[data-view]').forEach(x => x.classList.remove('on'));
+document.querySelectorAll('.tt[data-view]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tt[data-view]').forEach(x => x.classList.remove('on'));
   b.classList.add('on'); view = b.dataset.view; applyView();
 });
 document.getElementById('spin').onclick = e => { spin = !spin; e.target.classList.toggle('on', spin); };
 
-/* ───────── input UI ───────── */
-const promptEl = document.getElementById('prompt');
-const fileEl = document.getElementById('file'), drop = document.getElementById('drop');
-const preview = document.getElementById('preview'), dropText = document.getElementById('dropText');
-const clearBtn = document.getElementById('clear');
-let imageFile = null;
-
-document.querySelectorAll('.chip').forEach(c => c.onclick = () => { promptEl.value = c.textContent; });
-drop.onclick = e => { if (e.target !== clearBtn) fileEl.click(); };
-['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
-['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
-drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) setImage(f); });
-fileEl.onchange = () => { if (fileEl.files[0]) setImage(fileEl.files[0]); };
-clearBtn.onclick = e => { e.stopPropagation(); imageFile = null; preview.classList.add('hidden'); clearBtn.classList.add('hidden'); dropText.classList.remove('hidden'); fileEl.value = ''; };
-function setImage(f){
-  imageFile = f; preview.src = URL.createObjectURL(f);
-  preview.classList.remove('hidden'); clearBtn.classList.remove('hidden'); dropText.classList.add('hidden');
+function resize(){
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / Math.max(h,1); camera.updateProjectionMatrix();
 }
+new ResizeObserver(resize).observe(wrap); resize();
+renderer.setAnimationLoop(() => {
+  if (model && spin) model.rotation.y += 0.006;
+  controls.update(); renderer.render(scene, camera);
+});
 
-/* ───────── generate ───────── */
-const stages = [...document.querySelectorAll('.stage')];
-const goBtn = document.getElementById('go'), err = document.getElementById('err');
-let fakeTimer = null;
+/* ───────── chat ───────── */
+const thread = document.getElementById('thread'), msgEl = document.getElementById('msg');
+const sendBtn = document.getElementById('send'), fileEl = document.getElementById('file');
+const boxEl = document.getElementById('box'), thumb = document.getElementById('thumb');
+const thumbImg = document.getElementById('thumbImg');
+let imageFile = null, busy = false, session = localStorage.getItem('cf_session') || '';
 
-function setStage(i, state, ms){
-  stages.forEach((s, k) => {
-    s.classList.remove('active', 'done');
-    if (k < i) s.classList.add('done');
-    if (k === i && state === 'active') s.classList.add('active');
-    if (k === i && state === 'done') s.classList.add('done');
-  });
-  if (ms != null) stages[i].querySelector('.ms').textContent = ms + ' ms';
+const SUGGESTIONS = [
+  'A chibi mage with a purple robe, a wizard hat and a staff',
+  'Tall elf ranger in a green hood and cape with a bow',
+  'Heavy orc warrior with silver armor, a big sword and a shield',
+  'Cute robot janitor, teal chassis, glowing yellow eyes, 2500 tris',
+];
+document.getElementById('sug').innerHTML =
+  SUGGESTIONS.map(s => `<button>${s}</button>`).join('');
+document.querySelectorAll('#sug button').forEach(b => b.onclick = () => {
+  msgEl.value = b.textContent; autosize(); msgEl.focus();
+});
+const QUICK = ['make it chibi', 'add a cape', 'add wings', 'make the robe red',
+               'keep it under 2000 tris', 'high detail', 'taller'];
+function quickChips(mid){
+  return QUICK.map(q => `<button class="mini" data-quick="${q}">${q}</button>`).join('');
 }
-
-goBtn.onclick = async () => {
-  err.style.display = 'none';
-  const fd = new FormData();
-  fd.append('text', promptEl.value.trim());
-  fd.append('budget', document.getElementById('budget').value);
-  fd.append('use_ai', document.getElementById('useAi').checked ? '1' : '0');
-  if (imageFile) fd.append('image', imageFile);
-  if (!imageFile && !promptEl.value.trim()){ showErr('Type a description or drop a concept image.'); return; }
-
-  goBtn.disabled = true; goBtn.textContent = 'Forging…';
-  stages.forEach(s => s.querySelector('.ms').textContent = '');
-  let i = 0; setStage(0, 'active');
-  fakeTimer = setInterval(() => { if (i < stages.length - 1){ i++; setStage(i, 'active'); } }, 450);
-
-  try {
-    const r = await fetch('/generate', { method: 'POST', body: fd });
-    const data = await r.json();
-    clearInterval(fakeTimer);
-    if (!r.ok) throw new Error(data.error || 'Generation failed');
-    let prev = 0;
-    data.stages.forEach((s, k) => { setStage(k, 'done', s.ms - prev); prev = s.ms; });
-    stages.forEach(s => s.classList.add('done'));
-    renderReport(data);
-    await loadModel(data.preview);
-    loadRecent();
-  } catch (e) {
-    clearInterval(fakeTimer); stages.forEach(s => s.classList.remove('active'));
-    showErr(e.message);
-  } finally {
-    goBtn.disabled = false; goBtn.textContent = '⚡ Generate 3D character';
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-quick]');
+  if (b){ msgEl.value = b.dataset.quick; send(); }
+  const c = e.target.closest('[data-copy]');
+  if (c){
+    const url = new URL(c.dataset.copy, location.origin).href;
+    navigator.clipboard?.writeText(url).then(
+      () => { c.textContent = 'link copied ✓'; setTimeout(() => c.textContent = 'copy link', 1600); },
+      () => { msgEl.value = url; });
   }
-};
-function showErr(m){ err.textContent = m; err.style.display = 'block'; }
+});
 
-/* ───────── recent gallery ───────── */
-async function loadRecent(){
-  try {
-    const r = await fetch('/recent'); const d = await r.json();
-    document.getElementById('persistNote').textContent = d.persistent ? '· saved in Postgres' : '· this instance only';
-    const box = document.getElementById('recent');
-    if (!d.items.length){ box.innerHTML = '<span class="muted">Nothing generated yet.</span>'; return; }
-    box.innerHTML = d.items.map(it => `
-      <div class="item" data-id="${it.id}" title="${(it.prompt||'').replace(/"/g,'&quot;')}">
-        <span class="s">${it.style||''}</span>
-        <span class="p">${it.source === 'image' ? '🖼 concept image' : (it.prompt||'')}</span>
-        <span class="m">${(it.triangles||0).toLocaleString()} tris</span>
-      </div>`).join('');
-    box.querySelectorAll('.item').forEach(el => el.onclick = async () => {
-      err.style.display = 'none';
-      try {
-        const rr = await fetch('/report/' + el.dataset.id); const rep = await rr.json();
-        if (!rr.ok) throw new Error(rep.error || 'not found');
-        rep.id = rep.id || el.dataset.id;
-        renderReport(rep); await loadModel(rep.preview);
-        stages.forEach(s => { s.classList.add('done'); s.querySelector('.ms').textContent = ''; });
-      } catch (e) { showErr(e.message); }
-    });
-  } catch (e) { /* offline */ }
+function esc(s){ return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function autosize(){ msgEl.style.height = 'auto'; msgEl.style.height = Math.min(msgEl.scrollHeight, 132) + 'px'; }
+msgEl.addEventListener('input', autosize);
+msgEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); }
+});
+document.getElementById('attach').onclick = () => fileEl.click();
+fileEl.onchange = () => fileEl.files[0] && setImage(fileEl.files[0]);
+document.getElementById('thumbX').onclick = () => { imageFile = null; thumb.style.display = 'none'; fileEl.value = ''; };
+['dragenter','dragover'].forEach(ev => boxEl.addEventListener(ev, e => { e.preventDefault(); boxEl.classList.add('over'); }));
+['dragleave','drop'].forEach(ev => boxEl.addEventListener(ev, e => { e.preventDefault(); boxEl.classList.remove('over'); }));
+boxEl.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f && f.type.startsWith('image/')) setImage(f); });
+document.addEventListener('paste', e => {
+  const it = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+  if (it) setImage(it.getAsFile());
+});
+function setImage(f){ imageFile = f; thumbImg.src = URL.createObjectURL(f); thumb.style.display = 'block'; }
+
+function bubble(who, html, me){
+  const row = document.createElement('div');
+  row.className = 'row' + (me ? ' me' : '');
+  row.innerHTML = `<div class="av">${me ? '🧑' : '🤖'}</div><div class="bub">${who ? `<div class="who">${who}</div>` : ''}${html}</div>`;
+  thread.appendChild(row); thread.scrollTop = thread.scrollHeight;
+  row.scrollTo = () => thread.scrollTo({top: row.offsetTop - 8, behavior: 'smooth'});
+  return row.querySelector('.bub');
 }
-loadRecent();
+function thinking(){
+  const b = bubble('Character Forge', `<div class="typing"><span class="dot"></span><span class="dot"></span>
+    <span class="dot"></span><span id="tstage" style="margin-left:6px">director is planning the build…</span></div>`);
+  const words = ['reading your input…', 'AI director is choosing proportions, materials and a poly budget…',
+                 'reconstructing geometry…', 'unwrapping UVs and baking PBR atlases…',
+                 'optimising topology…', 'exporting GLB / OBJ / STL…'];
+  let i = 0;
+  const t = setInterval(() => {
+    const el = b.querySelector('#tstage'); if (el) el.textContent = words[Math.min(++i, words.length - 1)];
+  }, 6500);
+  return { b, stop(){ clearInterval(t); } };
+}
+
+function planCard(plan, report){
+  if (!plan) return '';
+  const p = plan.palette || {}, mats = plan.materials || {};
+  const rows = [
+    ['style', `${plan.style} · ${plan.heads_tall} heads tall · build ${plan.build}`],
+    ['species', plan.species || '—'],
+    ['height', `${plan.height_m} m`],
+    ['triangle budget', `${(plan.target_tris || 0).toLocaleString()} tris → built ${report.geometry.triangles.toLocaleString()}`],
+    ['resolution', `${plan.texture_size}² textures · sphere ${plan.detail?.sphere_sub}/cyl ${plan.detail?.cyl_sec}/caps ${plan.detail?.cap_cnt}`],
+    ['features', (plan.features || []).join(', ') || 'base body only'],
+    ['confidence', plan.confidence != null ? plan.confidence : '—'],
+  ];
+  return `<details><summary>AI build plan <span class="chip ai" style="margin-left:8px">${esc(report.ai.plan_source || '')}${report.ai.model ? ' · ' + esc(report.ai.model) : ''}</span></summary>
+  <div class="dbody">
+    <div class="kv">${rows.map(([k, v]) => `<div>${esc(k)}</div><div>${esc(v)}</div>`).join('')}</div>
+    ${plan.back_view ? `<div style="margin-top:9px"><span class="who">hidden / unseen geometry</span>${esc(plan.back_view)}</div>` : ''}
+    ${(plan.modelling_plan || []).length ? `<div style="margin-top:9px"><span class="who">modelling steps</span>
+      <ul class="tight">${plan.modelling_plan.map(s => `<li>${esc(s)}</li>`).join('')}</ul></div>` : ''}
+    <div class="swatches">${Object.entries(p).map(([k, v]) =>
+      `<span class="sw"><i style="background:${esc(v)}"></i>${esc(k.replace('_',' '))}${mats[k] ? ' · ' + esc(mats[k]) : ''}</span>`).join('')}</div>
+  </div></details>`;
+}
+
+function statsGrid(g){
+  return `<div class="stats">
+    <div class="stat"><b>${g.triangles.toLocaleString()}</b><span>triangles${g.decimated ? ' (from ' + g.triangles_before_optimize.toLocaleString() + ')' : ''}</span></div>
+    <div class="stat"><b>${g.vertices.toLocaleString()}</b><span>vertices</span></div>
+    <div class="stat"><b>${g.volumes || '—'}</b><span>volumes</span></div>
+    <div class="stat"><b>${g.materials}</b><span>material / draw call</span></div>
+    <div class="stat"><b>${g.texture_size}²</b><span>${(g.maps || []).join(' · ')}</span></div>
+  </div>`;
+}
+
+function resultBubble(report){
+  const panel = panelFor(report);
+  const note = report.ai?.error
+    ? `<div class="chip warn">⚠ AI director unavailable — built with the rule planner (${esc(String(report.ai.error).slice(0,90))})</div>` : '';
+  const html = `
+    ${report.plan?.brief ? `<p>${esc(report.plan.brief)}</p>` : ''}
+    <div>${note}<span class="chip ok">${report.geometry.triangles.toLocaleString()} tris</span>
+      <span class="chip">${esc(report.style)}</span>
+      <span class="chip">${report.height_m} m</span>
+      ${(report.accessories || []).map(a => `<span class="chip">${esc(a.replace('_',' '))}</span>`).join('')}</div>
+    ${planCard(report.plan, report)}
+    ${statsGrid(report.geometry)}
+    <details><summary>Pipeline timing</summary><div class="dbody">
+      <div class="stages">${report.stages.map(s => `<span class="stage done">${esc(s.name)} · ${s.ms} ms</span>`).join('')}</div>
+    </div></details>
+    <details><summary>Texture atlases</summary><div class="dbody"><div class="atlas">
+      <figure><img src="/model/${report.id}/texture_atlas.png" alt=""><figcaption>base colour</figcaption></figure>
+      <figure><img src="/model/${report.id}/normal_atlas.png" alt=""><figcaption>normal</figcaption></figure>
+      <figure><img src="/model/${report.id}/mr_atlas.png" alt=""><figcaption>metal / rough</figcaption></figure>
+    </div></div></details>
+    ${(report.notes || []).length ? `<details><summary>Notes from the pipeline</summary><div class="dbody">
+      <ul class="tight">${report.notes.slice(0,8).map(n => `<li>${esc(n)}</li>`).join('')}</ul></div></details>` : ''}
+    <div class="acts">
+      <a class="dl primary" href="${report.downloads.glb}" download target="_blank" rel="noopener">⬇ GLB <small>Unity · Godot</small></a>
+      <a class="dl" href="${report.downloads.obj}" download target="_blank" rel="noopener">OBJ + MTL</a>
+      <a class="dl" href="${report.downloads.stl}" download target="_blank" rel="noopener">STL</a>
+      <a class="dl" href="${report.downloads.all}" download target="_blank" rel="noopener">Everything (.zip)</a>
+      <button class="mini" data-copy="${report.downloads.glb}">copy link</button>
+      <button class="mini" data-view="${report.mid}">show in viewer</button>
+    </div>
+    <div class="acts">${quickChips(report.mid)}</div>`;
+  return html;
+}
+const panelFor = r => r;
+
+function pushTurn(turn, report){
+  const b = bubble('Character Forge', turn.kind === 'revision'
+    ? `<div class="who">revision applied to build ${esc(report.id)}</div>` + resultBubble(report)
+    : resultBubble(report));
+  b.querySelector('[data-view]')?.addEventListener('click', () => loadModel(report.preview, `${report.id} · ${report.geometry.triangles.toLocaleString()} tris`));
+}
+
+async function send(){
+  if (busy) return;
+  const text = msgEl.value.trim();
+  if (!text && !imageFile) return;
+  busy = true; sendBtn.disabled = true;
+  const imgNote = imageFile ? `<div class="muted" style="font-size:12px;color:var(--muted)">🖼 ${esc(imageFile.name || 'clipboard image')}</div>` : '';
+  bubble('You', `<p>${esc(text || '(concept image)')}</p>${imgNote}`, true);
+  msgEl.value = ''; autosize();
+  const t = thinking();
+  try{
+    const fd = new FormData();
+    fd.append('message', text);
+    fd.append('session', session);
+    fd.append('budget', document.getElementById('budget').value);
+    fd.append('use_ai', document.getElementById('useAi').checked ? '1' : '0');
+    if (imageFile) fd.append('image', imageFile, imageFile.name || 'concept.png');
+    const r = await fetch('/chat', {method:'POST', body: fd});
+    const data = await r.json();
+    t.stop();
+    if (!r.ok) throw new Error(data.error || 'generation failed');
+    session = data.session; localStorage.setItem('cf_session', session);
+    t.b.closest('.row').remove();
+    pushTurn(data.turn, data.report);
+    thread.lastElementChild?.scrollIntoView({block: 'start', behavior: 'smooth'});
+    loadModel(data.report.preview, `${data.report.id} · ${data.report.geometry.triangles.toLocaleString()} tris`);
+    if (imageFile){ imageFile = null; thumb.style.display = 'none'; fileEl.value = ''; }
+    loadRecent();
+  }catch(e){
+    t.stop(); t.b.innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  }finally{
+    busy = false; sendBtn.disabled = false; msgEl.focus(); thread.scrollTop = thread.scrollHeight;
+  }
+}
+sendBtn.onclick = send;
+
+/* ───────── sessions / recent ───────── */
+document.getElementById('newBtn').onclick = async () => {
+  const r = await fetch('/reset', {method:'POST'}); const d = await r.json();
+  session = d.session; localStorage.setItem('cf_session', session);
+  thread.innerHTML = ''; document.getElementById('vmeta').textContent = '';
+  document.getElementById('vhint').style.display = 'grid';
+  if (model){ scene.remove(model); model = null; }
+  greet();
+};
+document.getElementById('recentBtn').onclick = async () => {
+  const r = await fetch('/recent'); const d = await r.json();
+  if (!d.items.length) return bubble('Character Forge', '<p>Nothing built yet.</p>');
+  bubble('Character Forge', '<div class="who">recent builds</div>' + d.items.map(it =>
+    `<div class="acts"><button class="mini" data-recent="${it.id}">${esc((it.prompt || '').slice(0, 52))} · ${(it.triangles||0).toLocaleString()} tris</button></div>`).join(''));
+  document.querySelectorAll('[data-recent]').forEach(b => b.onclick = async () => {
+    const rr = await fetch('/report/' + b.dataset.recent); const rep = await rr.json();
+    if (rep.error) return;
+    loadModel(rep.preview, `${rep.id} · ${rep.geometry.triangles.toLocaleString()} tris`);
+  });
+};
+
+function greet(){
+  bubble('Character Forge', `<p>Tell me the character you want — a sentence is enough. I'll plan it like a modeller would
+  (proportions, silhouette breakdown, materials, unseen back side), choose a sensible polygon budget, then build the mesh,
+  UVs, PBR textures and exports.</p>
+  <p style="color:var(--muted);font-size:13px">Prefer an existing design? Drop a concept image in — I'll read silhouette, proportions,
+  materials and colours from it. After a build, just keep talking: <i>“make the cape red”</i>, <i>“add wings”</i>, <i>“keep it under 2000 tris”</i>.</p>`);
+}
+if (new URLSearchParams(location.search).get('fresh')){ /* skip restore */ }
+async function restore(){
+  if (!session) return false;
+  try{
+    const r = await fetch('/chat/' + session);
+    if (!r.ok) return false;
+    const d = await r.json();
+    if (!d.turns?.length) return false;
+    d.turns.forEach(t => { const rep = d.reports?.[t.mid]; if (rep){ rep.id = rep.id || t.mid;
+      rep.downloads = rep.downloads || {glb:'',obj:'',stl:'',all:''}; pushTurn(t, rep); } });
+    const last = d.turns[d.turns.length - 1];
+    const rep = d.reports?.[last.mid];
+    if (rep) loadModel(rep.preview, `${rep.id} · ${rep.geometry.triangles.toLocaleString()} tris`);
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ───────── frame / download guard ───────── */
+try{
+  if (window.self !== window.top){
+    document.getElementById('frameNote').style.display = 'flex';
+    document.getElementById('openTab').onclick = () => window.open(location.href, '_blank', 'noopener');
+  }
+}catch(e){ /* cross-origin: we're framed */ document.getElementById('frameNote').style.display = 'flex'; }
+
 fetch('/health').then(r => r.json()).then(h => {
   const el = document.getElementById('aiState'), cb = document.getElementById('useAi');
-  if (h.ai){ el.textContent = '· ' + (h.ai_model || 'ready'); }
-  else { el.textContent = '(no API key on this server)'; cb.checked = false; cb.disabled = true; }
+  if (h.ai) el.textContent = '· ' + (h.ai_model || 'ready');
+  else { el.textContent = '(no API key — rule planner)'; cb.checked = false; cb.disabled = true; }
 }).catch(() => {});
+async function loadRecent(){ /* gallery is fetched on demand */ }
 
-/* ───────── report ───────── */
-function aiBlock(d){
-  const a = d.ai || {};
-  if (a.used) return `<div class="brief"><span class="who">🤖 ${a.model}</span>${a.brief || 'Character analysed by the language model.'}</div>`;
-  if (a.enabled && a.error) return `<div class="brief off"><span class="who">⚠ AI analysis fell back to heuristics</span><span class="muted">${String(a.error).slice(0,160)}</span></div>`;
-  return '';
-}
-function renderReport(d){
-  const g = d.geometry;
-  document.getElementById('analysis').innerHTML = aiBlock(d) + `
-    <div class="muted" style="margin-bottom:8px">Source: <b style="color:var(--text)">${d.source === 'image' ? 'concept image' : 'text prompt'}</b>
-      · style <b style="color:var(--text)">${d.style}</b> · height ${d.height_m} m</div>
-    <div class="tags">${[...new Set([...d.tags, ...d.accessories.map(a => a.replace('_',' '))])].map(t => `<span class="tag">${t}</span>`).join('')}</div>
-    <div style="height:10px"></div>
-    <div class="swatches">${Object.entries(d.palette).map(([k, v]) => `<div class="sw"><i style="background:${v}"></i>${k.replace('_',' ')}</div>`).join('')}</div>
-    <div style="height:10px"></div>
-    <ul class="notes">${d.notes.map(n => `<li>${n}</li>`).join('')}</ul>`;
-
-  document.getElementById('stats').innerHTML = `
-    <div class="stat"><b>${g.triangles.toLocaleString()}</b><span>triangles${g.decimated ? ` (from ${g.triangles_before_optimize.toLocaleString()})` : ''}</span></div>
-    <div class="stat"><b>${g.vertices.toLocaleString()}</b><span>vertices</span></div>
-    <div class="stat"><b>${g.materials}</b><span>material / draw call</span></div>
-    <div class="stat"><b>${g.texture_size}²</b><span>${g.maps.join(' · ')}</span></div>`;
-
-  const base = `/model/${d.id}/`;
-  document.getElementById('atlases').innerHTML = `
-    <figure><img class="atlas" src="${base}texture_atlas.png"><figcaption>Base color</figcaption></figure>
-    <figure><img class="atlas" src="${base}normal_atlas.png"><figcaption>Normal</figcaption></figure>
-    <figure><img class="atlas" src="${base}mr_atlas.png"><figcaption>Metal / rough</figcaption></figure>`;
-
-  document.getElementById('dl').innerHTML = `
-    <a href="${d.downloads.glb}" download>GLB<small>Unity (glTFast) · Godot · Web</small></a>
-    <a href="${d.downloads.obj}" download>OBJ + MTL<small>Unity native · Blender · Maya</small></a>
-    <a href="${d.downloads.stl}" download>STL<small>3D printing</small></a>
-    <a href="${d.downloads.texture}" download>Texture atlas<small>PNG ${g.texture_size}²</small></a>`;
-}
+(async () => { if (!await restore()) greet(); })();
 </script>
 </body>
 </html>

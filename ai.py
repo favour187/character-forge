@@ -65,30 +65,88 @@ def available():
     return bool(API_KEY)
 
 
-def _post(payload):
+def _post(payload, timeout=None):
     req = urllib.request.Request(
         f"{BASE_URL}/chat/completions", method="POST",
         data=json.dumps(payload).encode("utf-8"),
         headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json",
                  "HTTP-Referer": APP_URL, "X-Title": APP_NAME})
-    with urllib.request.urlopen(req, timeout=PER_MODEL_TIMEOUT) as r:
+    with urllib.request.urlopen(req, timeout=timeout or PER_MODEL_TIMEOUT) as r:
         return json.loads(r.read().decode("utf-8"))
 
 
+def _balanced(text):
+    """First balanced {...} block, ignoring braces inside strings."""
+    start = text.find("{")
+    if start < 0:
+        return None
+    depth, in_str, esc = 0, False, False
+    for i in range(start, len(text)):
+        c = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+            continue
+        if c == '"':
+            in_str = True
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return text[start:]                     # truncated, caller may repair
+
+
+def _repair(chunk):
+    """Best-effort close of a truncated JSON object (models that run out of room)."""
+    out, in_str, esc = [], False, False
+    for c in chunk:
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True
+        out.append(c)
+    s = "".join(out)
+    if in_str:                              # close an unterminated string
+        s += '"'
+    s = re.sub(r",\s*$", "", s.rstrip())
+    s = re.sub(r":\s*$", ": null", s)
+    opens = s.count("{") - s.count("}")
+    brackets = s.count("[") - s.count("]")
+    s += "]" * max(0, brackets) + "}" * max(0, opens)
+    s = re.sub(r",\s*([}\]])", r"\1", s)
+    return s
+
+
 def _extract_json(text):
-    text = text.strip()
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.S)
-    try:
-        return json.loads(text)
-    except Exception:  # noqa: BLE001
-        m = re.search(r"\{.*\}", text, flags=re.S)
-        if m:
-            return json.loads(m.group(0))
+    text = (text or "").strip()
+    text = re.sub(r"^```(?:json)?|```$", "", text, flags=re.M).strip()
+    for candidate in (text, _balanced(text) or ""):
+        if not candidate:
+            continue
+        for attempt in (candidate, _repair(candidate)):
+            try:
+                obj = json.loads(attempt)
+                if isinstance(obj, dict):
+                    return obj
+            except Exception:               # noqa: BLE001
+                continue
     raise ValueError("model returned no JSON object")
 
 
-def _attempt(model, messages):
-    res = _post({"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 700})
+def _attempt(model, messages, max_tokens=700, temperature=0.2, timeout=None):
+    res = _post({"model": model, "messages": messages,
+                 "temperature": temperature, "max_tokens": max_tokens}, timeout=timeout)
     if "error" in res:
         raise RuntimeError(str(res["error"].get("message", res["error"]))[:160])
     msg = res["choices"][0]["message"]
@@ -97,27 +155,32 @@ def _attempt(model, messages):
         content = "".join(p.get("text", "") for p in content)
     if not content:                                # reasoning-only models
         content = msg.get("reasoning") or ""
+        if "brief" not in content and "features" not in content:
+            content = ""                           # avoid parsing the echoed schema
     return _extract_json(content), res.get("model", model)
 
 
-def _chat(messages):
+def _chat(messages, max_tokens=700, temperature=0.2, timeout=None, budget=None):
     """Primary model (with back-off on 429) then each fallback in turn."""
     chain = [PRIMARY] + [m for m in FALLBACKS if m != PRIMARY]
     errors = []
     t0 = time.time()
+    budget = TOTAL_BUDGET if budget is None else budget
     for i, model in enumerate(chain):
         retries = RETRY_429 if i == 0 else (RETRY_429[:1] if model == "openrouter/free" else ())
         for attempt in range(len(retries) + 1):
-            if time.time() - t0 > TOTAL_BUDGET:
+            if time.time() - t0 > budget:
                 raise RuntimeError(f"AI time budget exhausted after {len(errors)} attempts; "
                                    f"last: {errors[-1] if errors else '-'}")
             try:
-                return _attempt(model, messages)
+                return _attempt(model, messages, max_tokens, temperature, timeout)
             except urllib.error.HTTPError as e:
                 body = e.read()[:120].decode("utf-8", "ignore")
                 errors.append(f"{model}: HTTP {e.code}")
-                if e.code in (401, 403):
-                    raise RuntimeError(f"OpenRouter rejected the API key (HTTP {e.code})")
+                if e.code == 401:
+                    raise RuntimeError("OpenRouter rejected the API key (HTTP 401)")
+                if e.code == 403:               # model not open to this account: next one
+                    break
                 if e.code == 429 and attempt < len(retries):
                     time.sleep(retries[attempt])
                     continue
@@ -128,6 +191,18 @@ def _chat(messages):
         time.sleep(0.2)
     raise RuntimeError(f"all {len(chain)} free models unavailable ({len(errors)} attempts, "
                        f"mostly rate-limited) - last: {errors[-1] if errors else '-'}")
+
+
+def _b64_image(image_bytes, max_side=768, quality=85):
+    """JPEG data URL used for vision requests (shared with the director)."""
+    try:
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        img.thumbnail((max_side, max_side))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=quality)
+        return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:                                  # noqa: BLE001
+        return None
 
 
 def _hex_to_rgb(h):
@@ -182,14 +257,10 @@ def analyze_text(text):
 
 
 def analyze_image(image_bytes, hint=""):
-    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    img.thumbnail((640, 640))
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=85)
-    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    b64 = _b64_image(image_bytes, max_side=640) or ""
     user = [{"type": "text", "text": "Analyse this character concept image." +
              (f" Extra context: {hint}" if hint else "")},
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]
+            {"type": "image_url", "image_url": {"url": b64}}]
     data, model = _chat([{"role": "system", "content": SYSTEM},
                          {"role": "user", "content": user}])
     return _clean(data), model

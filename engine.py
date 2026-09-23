@@ -11,6 +11,8 @@ Stages (mirrors the Tripo/Meshy-style flow, implemented locally):
 """
 
 import io
+import json
+import re
 import time
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
@@ -47,10 +49,12 @@ BUDGETS = {
     "high":   {"tris": 15000, "sphere_sub": 4, "cyl_sec": 24, "cap_cnt": (10, 24)},
 }
 
+HEADS_RANGE = {"chibi": (2.4, 4.6), "stylized": (3.8, 5.6), "realistic": (5.4, 7.6)}
+
 STYLE_PROPS = {
-    "chibi":     {"heads": 3.1, "build": 1.08, "arm_len": 0.72},
-    "stylized":  {"heads": 4.6, "build": 1.00, "arm_len": 0.92},
-    "realistic": {"heads": 6.4, "build": 0.94, "arm_len": 1.05},
+    "chibi":     {"heads": 3.1, "build": 1.08, "arm_len": 0.66, "arm_r": 0.42, "leg_r": 0.52},
+    "stylized":  {"heads": 4.6, "build": 1.00, "arm_len": 0.90, "arm_r": 0.36, "leg_r": 0.46},
+    "realistic": {"heads": 6.4, "build": 0.94, "arm_len": 1.02, "arm_r": 0.33, "leg_r": 0.44},
 }
 
 # ----------------------------------------------------------------------------
@@ -64,8 +68,13 @@ def default_params():
         garment_a=(106, 74, 158), garment_b=(236, 228, 210),
         pants=(58, 62, 84), boots=(90, 70, 50), leather=(128, 90, 56),
         metal=(176, 181, 190), accent=(216, 168, 60), eye=(40, 42, 52),
-        accessories=set(), tags=[],
+        accessories=set(), tags=[], heads=None, detail=None, materials={},
     )
+
+
+def _has_word(t, word):
+    """Whole-word match with simple plurals/verb forms ('wing' != 'glowing')."""
+    return re.search(r"\b" + re.escape(word) + r"(s|es|ed|ing|ic|ish|y)?\b", t) is not None
 
 
 def _set_color(p, target_key, rgb):
@@ -78,7 +87,7 @@ def analyze_text(text):
     tags = p["tags"]
 
     def has(*words):
-        return any(w in t for w in words)
+        return any(_has_word(t, w) for w in words)
 
     # species / body
     if has("orc", "ogre", "brute"):
@@ -130,6 +139,29 @@ def analyze_text(text):
         p["accessories"].add("glasses"); tags.append("glasses")
     if has("armor", "armour", "plate"):
         p["garment_a"] = (150, 156, 168); tags.append("armored")
+    if has("wing", "angel", "fairy", "valkyrie", "seraph"):
+        p["accessories"].add("wings"); tags.append("wings")
+    if has("hood", "hoodie", "rogue", "assassin", "ranger"):
+        p["accessories"].add("hood"); tags.append("hood")
+    if has("crown", "tiara", "king", "queen", "royal", "princess", "prince"):
+        p["accessories"].add("crown"); tags.append("crown")
+    if has("scarf", "bandana", "muffler", "sash", "neck wrap"):
+        p["accessories"].add("scarf"); tags.append("scarf")
+    if has("skirt", "dress", "gown", "tutu"):
+        p["accessories"].add("skirt"); tags.append("skirt")
+    if has("shoulder pad", "pauldron", "spaulder", "armor", "armour", "plate",
+           "knight", "paladin"):
+        p["accessories"].add("shoulder_pads"); tags.append("shoulder pads")
+    if has("chest plate", "breastplate", "armor", "armour", "plate", "knight", "paladin"):
+        p["accessories"].add("armor_plates"); tags.append("armor plates")
+    if has("robot", "android", "mech", "cyborg", "droid", "automaton", "machine"):
+        p["accessories"].add("robot_joints"); tags.append("robot joints")
+    if has("tall boots", "thigh boots", "knee boots", "jackboots", "greaves"):
+        p["accessories"].add("boots_tall"); tags.append("tall boots")
+    if has("fluffy tail", "fox", "wolf", "kitsune", "furry"):
+        p["accessories"].add("tail_fluffy"); tags.append("fluffy tail")
+    if has("long hair", "ponytail", "braid", "mane", "long-haired", "hime cut"):
+        p["accessories"].add("hair_long"); tags.append("long hair")
 
     # colors: "<color> <target>"
     targets = {
@@ -145,6 +177,10 @@ def analyze_text(text):
         "strap": "leather", "satchel": "leather",
         "sword": "metal", "blade": "metal", "staff": "leather",
         "hat": "accent", "gem": "accent", "eyes": "eye",
+        "wings": "garment_b", "skirt": "garment_b", "scarf": "accent",
+        "crown": "metal", "armor": "metal", "armour": "metal",
+        "pauldron": "metal", "shoulder": "metal", "tail": "hair",
+        "fluff": "hair", "mane": "hair", "joints": "metal",
     }
     for cname, rgb in NAMED_COLORS.items():
         for tok in (" " + cname + " ", " " + cname + "-"):
@@ -155,12 +191,19 @@ def analyze_text(text):
                     break
                 idx = i + 1
                 after = t[i + len(tok): i + len(tok) + 24].split()
+                before = t[:i].split()[-4:]  # "the cape should be blue"
                 key = None
-                for w in after[:2]:
+                for w in after[:2]:                    # "red robe"
                     w = w.strip(".,!?;:")
                     if w in targets:
                         key = targets[w]
                         break
+                if key is None:                        # "make the robe red"
+                    for w in reversed(before):
+                        w = w.strip(".,!?;:")
+                        if w in targets:
+                            key = targets[w]
+                            break
                 if key:
                     _set_color(p, key, rgb)
                 else:
@@ -168,6 +211,7 @@ def analyze_text(text):
                 tags.append(f"{cname} tint")
     # dedupe tags, keep order
     seen = set(); p["tags"] = [x for x in tags if not (x in seen or seen.add(x))]
+    p["build"] = max(0.72, min(1.45, p["build"]))
     p["source_notes"] = ["Hidden surfaces built from semantic defaults (a full 3D body is "
                          "reconstructed, not just the visible side)."]
     return p
@@ -415,7 +459,7 @@ def build_character(p, budget):
     Layout: Y-up, metres, origin between the feet, facing +Z, A-pose."""
     sp = STYLE_PROPS[p["style"]]
     H = p["height"]
-    heads = sp["heads"]
+    heads = p.get("heads") or sp["heads"]
     build = p["build"] * sp["build"]
     head_r = H / (2 * heads) * p.get("head_boost", 1.0)
     head_c = H - head_r * 1.02
@@ -424,7 +468,7 @@ def build_character(p, budget):
     torso_len = neck_y - hip_y
     torso_mid = (neck_y + hip_y) / 2
     torso_r = H * 0.085 * build
-    sh_x = torso_r * 1.25 * build                # shoulder x-offset
+    sh_x = torso_r * 1.35 * build                # shoulder x-offset
     sub = budget["sphere_sub"]; sec = budget["cyl_sec"]; cnt = budget["cap_cnt"]
     S = trimesh.creation.icosphere
     BOX = trimesh.creation.box
@@ -439,16 +483,25 @@ def build_character(p, budget):
     head.apply_translation([0, head_c, 0])
     add(head, TILE["skin"])
 
-    hair = S(subdivisions=sub, radius=head_r * 1.09)
+    hair = S(subdivisions=sub, radius=head_r * 1.07)
+    hair.apply_transform(np.diag([1.0, 0.92, 1.0, 1.0]))
+    # keep the top + back (plane normal points up and backwards), so the face stays clear
     hair = trimesh.intersections.slice_mesh_plane(
-        hair, plane_normal=[0, 1, 0], plane_origin=[0, -head_r * 0.15, 0])
-    hair.apply_translation([0, head_c + head_r * 0.06, -head_r * 0.07])
+        hair, plane_normal=[0.0, 0.72, -0.69], plane_origin=[0, head_r * 0.42, head_r * 0.12])
+    fringe = trimesh.intersections.slice_mesh_plane(
+        trimesh.creation.icosphere(subdivisions=max(1, sub - 1), radius=head_r * 1.05),
+        plane_normal=[0.0, 1.0, 0.0], plane_origin=[0, head_r * 0.62, 0])
+    fringe = trimesh.intersections.slice_mesh_plane(
+        fringe, plane_normal=[0.0, -0.55, 1.0], plane_origin=[0, head_r * 0.72, head_r * 0.62])
+    hair = trimesh.util.concatenate([hair, fringe])
+    hair.apply_translation([0, head_c, 0])
     if len(hair.faces) > 4:
         add(hair, TILE["hair"])
 
     for s in (-1, 1):
-        e = S(subdivisions=max(1, sub - 1), radius=head_r * 0.11)
-        e.apply_translation([s * head_r * 0.36, head_c + head_r * 0.05, head_r * 0.88])
+        e = S(subdivisions=max(1, sub - 1), radius=head_r * 0.155)
+        e.apply_transform(np.diag([1.0, 1.15, 0.7, 1.0]))
+        e.apply_translation([s * head_r * 0.34, head_c - head_r * 0.05, head_r * 0.83])
         add(e, TILE["eye"])
 
     # ---- neck / torso / hips ------------------------------------------------
@@ -456,19 +509,19 @@ def build_character(p, budget):
     neck.apply_translation([0, neck_y + head_r * 0.1, 0])
     add(neck, TILE["skin"])
 
-    torso = cap_y(torso_len * 0.78, torso_r, count=cnt)
+    torso = cap_y(torso_len * 0.82, torso_r, count=cnt)
     torso.apply_transform(np.diag([1.35, 1.0, 0.85, 1.0]))
-    torso.apply_translation([0, torso_mid, 0])
+    torso.apply_translation([0, torso_mid + torso_len * 0.06, 0])
     add(torso, TILE["garment_a"])
 
-    belt = cyl_y(torso_r * 1.05, hip_y * 0.12, sections=sec)
-    belt.apply_transform(np.diag([1.3, 1.0, 0.9, 1.0]))
-    belt.apply_translation([0, hip_y + hip_y * 0.02, 0])
+    belt = cyl_y(torso_r * 1.18, hip_y * 0.17, sections=sec)
+    belt.apply_transform(np.diag([1.22, 1.0, 0.92, 1.0]))
+    belt.apply_translation([0, hip_y * 1.01, 0])
     add(belt, TILE["leather"])
 
     # ---- arms (A-pose, ~24 degrees from the body) ----------------------------
     arm_len = torso_len * 1.05 * sp["arm_len"]
-    arm_r = torso_r * 0.34
+    arm_r = torso_r * sp.get("arm_r", 0.36)
     ang = 24.0
     for s in (-1, 1):
         shoulder = np.array([s * sh_x * 1.1, neck_y - head_r * 0.25, 0.0])
@@ -482,17 +535,20 @@ def build_character(p, budget):
         add(hand, TILE["skin"])
 
     # ---- legs / boots ---------------------------------------------------------
-    leg_r = torso_r * 0.44
+    leg_r = torso_r * sp.get("leg_r", 0.46)
     leg_len = hip_y * 0.86
     for s in (-1, 1):
         x = s * torso_r * 0.55
         leg = cap_y(leg_len, leg_r, count=cnt)
         leg.apply_translation([x, hip_y * 0.05 + leg_len / 2, 0])
         add(leg, TILE["pants"])
-        boot = cyl_y(leg_r * 1.15, hip_y * 0.18, sections=sec)
-        boot.apply_transform(np.diag([1.0, 1.0, 1.45, 1.0]))
-        boot.apply_translation([x, hip_y * 0.09, leg_r * 0.35])
+        boot = cyl_y(leg_r * 1.15, hip_y * 0.19, sections=sec)
+        boot.apply_transform(np.diag([1.0, 1.0, 1.2, 1.0]))
+        boot.apply_translation([x, hip_y * 0.10, leg_r * 0.10])
         add(boot, TILE["boots"])
+        foot = BOX(extents=[leg_r * 2.05, leg_r * 1.05, leg_r * 3.4])
+        foot.apply_translation([x, leg_r * 0.55, leg_r * 0.85])
+        add(foot, TILE["boots"])
 
     acc = p["accessories"]
     back_z = -(torso_r * 0.85)
@@ -594,6 +650,85 @@ def build_character(p, budget):
                                             height=head_r * 0.05)   # Z-axis = facing forward
             ring.apply_translation([s * head_r * 0.36, head_c + head_r * 0.05, head_r * 0.95])
             add(ring, TILE["metal"])
+
+    # ---- features the AI director can request -------------------------------
+    if "hood" in acc:
+        hood = S(subdivisions=sub, radius=head_r * 1.22)
+        hood = trimesh.intersections.slice_mesh_plane(
+            hood, plane_normal=[0, 1, 0], plane_origin=[0, -head_r * 0.2, 0])
+        back = trimesh.intersections.slice_mesh_plane(
+            hood, plane_normal=[0, 0, 1], plane_origin=[0, 0, head_r * 0.35])
+        hood = trimesh.util.concatenate([hood, back]) if len(back.faces) > 3 else hood
+        hood.apply_translation([0, head_c + head_r * 0.02, -head_r * 0.08])
+        add(hood, TILE["garment_a"])
+    if "hair_long" in acc:
+        mane = cap_y(head_r * 1.7, head_r * 0.55, count=cnt)
+        mane.apply_transform(np.diag([0.75, 1.0, 0.6, 1.0]))
+        mane.apply_translation([0, head_c - head_r * 0.55, -head_r * 0.35])
+        add(mane, TILE["hair"])
+    if "crown" in acc:
+        ring = trimesh.creation.annulus(r_min=head_r * 0.86, r_max=head_r * 1.02,
+                                        height=head_r * 0.18)
+        ring.apply_translation([0, head_c + head_r * 0.55, 0])
+        add(ring, TILE["metal"])
+        for k in range(5):
+            spike = cone_y(head_r * 0.12, head_r * 0.32, sections=max(6, sec // 2))
+            a = np.radians(-70 + k * 35)
+            spike.apply_translation([np.sin(a) * head_r * 0.94, head_c + head_r * 0.66,
+                                     np.cos(a) * head_r * 0.94])
+            add(spike, TILE["accent"])
+    if "scarf" in acc:
+        sc = trimesh.creation.annulus(r_min=torso_r * 0.75, r_max=torso_r * 1.12,
+                                      height=head_r * 0.34)
+        sc.apply_translation([0, neck_y + head_r * 0.05, 0])
+        add(sc, TILE["accent"])
+        tail_sc = BOX(extents=[torso_r * 0.5, torso_len * 0.55, torso_r * 0.16])
+        tail_sc.apply_translation([torso_r * 0.3, torso_mid + torso_len * 0.2, torso_r * 0.75])
+        add(tail_sc, TILE["accent"])
+    if "skirt" in acc:
+        sk = cone_y(torso_r * 1.6, torso_len * 0.75, sections=sec)
+        sk.apply_transform(_rot(180, [1, 0, 0]))
+        sk.apply_translation([0, hip_y + torso_len * 0.16, 0])
+        add(sk, TILE["garment_b"])
+    if "wings" in acc:
+        for s in (-1, 1):
+            wing = BOX(extents=[torso_r * 2.4, H * 0.30, torso_r * 0.045])
+            wing.apply_transform(_rot(-s * 22, [0, 0, 1]))
+            wing.apply_transform(_rot(-s * 12, [1, 0, 0]))
+            wing.apply_translation([s * torso_r * 1.95, torso_mid + torso_len * 0.30, back_z * 1.35])
+            add(wing, TILE["garment_b"])
+    if "shoulder_pads" in acc:
+        for s in (-1, 1):
+            pad = S(subdivisions=max(1, sub - 1), radius=torso_r * 0.62)
+            pad.apply_transform(np.diag([1.15, 0.72, 1.15, 1.0]))
+            pad.apply_translation([s * sh_x * 1.15, neck_y - head_r * 0.2, 0])
+            add(pad, TILE["metal"])
+    if "armor_plates" in acc:
+        chest = BOX(extents=[torso_r * 1.55, torso_len * 0.34, torso_r * 0.14])
+        chest.apply_transform(np.diag([1.0, 1.0, 1.0, 1.0]))
+        chest.apply_translation([0, torso_mid + torso_len * 0.18, torso_r * 0.62])
+        add(chest, TILE["metal"])
+        for s in (-1, 1):
+            thigh = BOX(extents=[torso_r * 0.85, hip_y * 0.3, torso_r * 0.5])
+            thigh.apply_translation([s * torso_r * 0.55, hip_y * 0.62, torso_r * 0.28])
+            add(thigh, TILE["metal"])
+    if "robot_joints" in acc:
+        for s in (-1, 1):
+            for y, xo in ((neck_y - head_r * 0.25, sh_x * 1.1),
+                          (hip_y * 0.05 + leg_len * 0.5, torso_r * 0.55)):
+                j = S(subdivisions=max(1, sub - 1), radius=torso_r * 0.3)
+                j.apply_translation([s * xo, y, 0])
+                add(j, TILE["metal"])
+    if "boots_tall" in acc:
+        for s in (-1, 1):
+            sh = cyl_y(leg_r * 1.28, hip_y * 0.46, sections=sec)
+            sh.apply_translation([s * torso_r * 0.55, hip_y * 0.26, 0])
+            add(sh, TILE["boots"])
+    if "tail_fluffy" in acc:
+        seg = cap_y(head_r * 1.5, head_r * 0.3, count=cnt)
+        seg.apply_transform(_rot(-60, [1, 0, 0]))
+        seg.apply_translation([0, hip_y * 1.05, back_z * 1.1])
+        add(seg, TILE["hair"])
 
     notes = [f"{len(parts)} volumes assembled in A-pose (rig-friendly), Y-up, 1 unit = 1 m"]
     return parts, notes
@@ -808,71 +943,390 @@ def swatch(rgb):
 # full pipeline
 # ----------------------------------------------------------------------------
 
-def run_pipeline(source="text", text=None, image_bytes=None,
-                 budget="game", tex_size=1024, model_dir=".", prompt="",
-                 use_ai=True):
+# ---------------------------------------------------------------------------
+# build plan: the decision layer (what the AI director produces)
+# ---------------------------------------------------------------------------
+
+FEATURES = ["backpack", "wizard_hat", "cape", "sword", "staff", "shield", "horns",
+            "cat_ears", "tail", "glasses", "hood", "hair_long", "crown", "scarf",
+            "skirt", "wings", "shoulder_pads", "armor_plates", "robot_joints",
+            "boots_tall", "tail_fluffy"]
+PLAN_SLOTS = ("skin", "hair", "garment_a", "garment_b", "pants", "boots",
+              "leather", "metal", "accent", "eye")
+
+
+def _as_rgb(v):
+    """Accept '#rrggbb' strings or (r, g, b) sequences."""
+    if v is None:
+        return None
+    if isinstance(v, str):
+        s = v.strip().lstrip("#")
+        if len(s) == 3:
+            s = "".join(c * 2 for c in s)
+        try:
+            return tuple(int(s[i:i + 2], 16) for i in (0, 2, 4))
+        except ValueError:
+            return None
+    try:
+        return tuple(int(c) for c in list(v)[:3])
+    except (TypeError, ValueError):
+        return None
+
+
+def plan_to_params(params, plan):
+    """Fold a build plan into engine params. Plan decides; heuristics fill gaps."""
+    p = dict(params)
+    p["accessories"] = {f for f in (plan.get("features") or []) if f in FEATURES}
+    for slot in PLAN_SLOTS:
+        rgb = _as_rgb((plan.get("palette") or {}).get(slot))
+        if rgb:
+            p[slot] = rgb
+    if plan.get("style") in STYLE_PROPS:
+        p["style"] = plan["style"]
+    for key, src in (("height", "height_m"), ("build", "build"), ("heads", "heads_tall")):
+        if plan.get(src):
+            p[key] = float(plan[src])
+    head_boost = plan.get("head_boost")
+    if head_boost:
+        p["head_boost"] = max(0.6, min(1.8, float(head_boost)))
+    p["materials"] = dict(plan.get("materials") or {})
+    p["plan"] = plan
+    tags = [t for t in (params.get("tags") or [])]
+    if plan.get("species"):
+        tags = [str(plan["species"])[:40]] + [t for t in tags if t != plan["species"]]
+    p["tags"] = tags[:8]
+    return p
+
+
+FEATURE_SYNONYMS = {
+    "cape": {"cape", "cloak", "mantle", "tabard", "drape"},
+    "wizard_hat": {"hat", "wizard", "witch", "brim", "pointy"},
+    "staff": {"staff", "stave", "rod", "shaft", "crystal", "mace", "scepter", "wand"},
+    "sword": {"sword", "blade", "hilt", "katana", "scabbard", "dagger"},
+    "shield": {"shield", "buckler", "aegis"},
+    "backpack": {"backpack", "bag", "pack", "rucksack", "satchel"},
+    "wings": {"wing", "wings", "feather"},
+    "tail": {"tail"},
+    "tail_fluffy": {"tail", "fluff"},
+    "horns": {"horn", "horns"},
+    "cat_ears": {"ear", "ears"},
+    "hair_long": {"hair", "ponytail", "braid", "mane"},
+    "crown": {"crown", "tiara", "circlet"},
+    "scarf": {"scarf", "bandana", "muffler"},
+    "hood": {"hood"},
+    "skirt": {"skirt", "dress", "gown"},
+    "armor_plates": {"breastplate", "plate", "chestplate", "cuirass"},
+    "shoulder_pads": {"pauldron", "shoulder"},
+    "boots_tall": {"greave", "boot"},
+    "robot_joints": {"joint", "servo", "actuator"},
+}
+
+
+def _duplicate_of(name, features):
+    """The feature an extra part would duplicate (the model sometimes asks twice)."""
+    tokens = set(re.findall(r"[a-z]+", str(name or "").lower()))
+    for feat in features:
+        words = FEATURE_SYNONYMS.get(feat, {feat.replace("_", " ")})
+        if tokens & words:
+            return feat
+    return None
+
+
+def build_extra_parts(plan, p, budget):
+    """Primitive volumes the director asked for on top of the base body."""
+    H = float(p["height"])
+    sp = STYLE_PROPS[p["style"]]
+    heads = p.get("heads") or sp["heads"]
+    head_r = H / (2 * heads)
+    def clamp_arr(v, lo, hi):
+        try:
+            out = [float(x) for x in v][:3]
+        except Exception:                       # noqa: BLE001
+            return None
+        while len(out) < 3:
+            out.append(0.0)
+        return [max(lo, min(hi, x)) for x in out]
+
+    parts, notes = [], []
+    seen_names = set()
+    for item in (plan.get("extra_parts") or [])[:8]:
+        nm = str(item.get("name") or item.get("type") or "").lower().strip()
+        if nm and nm in seen_names:
+            continue
+        seen_names.add(nm)
+        kind = str(item.get("type", "")).lower()
+        dup = _duplicate_of(item.get("name"), plan.get("features") or [])
+        if dup:
+            notes.append(f"AI part '{item.get('name')}' skipped - already modelled as '{dup}'")
+            continue
+        at = clamp_arr(item.get("at", [0, 0, 0]), -2.0, 3.0) or [0, 0, 0]
+        size = clamp_arr(item.get("size", [0.2, 0.2, 0.2]), 0.02, 1.6) or [0.2, 0.2, 0.2]
+        rot = clamp_arr(item.get("rot_deg", [0, 0, 0]), -180, 180) or [0, 0, 0]
+        tile = TILE.get(str(item.get("material", "leather")), TILE["leather"])
+        sec, sub, cnt = budget["cyl_sec"], budget["sphere_sub"], budget["cap_cnt"]
+        sx, sy, sz = (max(0.02, s) for s in size)
+        try:
+            if kind == "box":
+                m = trimesh.creation.box(extents=[sx, sy, sz])
+            elif kind == "sheet" or kind == "plane":
+                m = trimesh.creation.box(extents=[sx, sy, max(0.015, sz * 0.15)])
+            elif kind == "sphere":
+                m = trimesh.creation.icosphere(subdivisions=sub, radius=0.5)
+                m.apply_scale([sx, sy, sz])
+            elif kind in ("capsule", "cylinder", "cone"):
+                r = min(sx, sz) / 2
+                if kind == "capsule":
+                    m = cap_y(max(0.01, sy - 2 * r), r, cnt)
+                elif kind == "cylinder":
+                    m = cyl_y(r, sy, sec)
+                else:
+                    m = cone_y(r, sy, sec)
+                m.apply_scale([sx / (2 * r), 1.0, sz / (2 * r)])
+            else:
+                continue
+            for axis, ang in zip(([1, 0, 0], [0, 1, 0], [0, 0, 1]), rot):
+                if abs(ang) > 0.01:
+                    m.apply_transform(_rot(ang, axis))
+            m.apply_translation(at)
+            parts.append(Part(m, tile))
+            notes.append(f"AI part: {item.get('name') or kind} ({kind}, {str(item.get('material','leather'))})")
+        except Exception as e:                  # noqa: BLE001
+            notes.append(f"AI part '{item.get('name') or kind}' skipped ({type(e).__name__})")
+    return parts, notes
+
+
+# ---------------------------------------------------------------------------
+# local (no-API) planning + revision of plans
+# ---------------------------------------------------------------------------
+
+def detail_for_target(tris):
+    """Resolution knobs for a triangle budget (used when the AI does not set them)."""
+    tris = int(tris or 5000)
+    if tris <= 2500:
+        return {"sphere_sub": 2, "cyl_sec": 8, "cap_cnt": 6}
+    if tris <= 12000:
+        return {"sphere_sub": 3, "cyl_sec": 14, "cap_cnt": 12}
+    return {"sphere_sub": 4, "cyl_sec": 24, "cap_cnt": 20}
+
+
+def local_plan(params, text, budget_hint=None):
+    """Deterministic build plan used when no language model is available."""
+    sp = STYLE_PROPS[params["style"]]
+    heads = float(params.get("heads") or sp["heads"])
+    tris = int(budget_hint or BUDGETS["game"]["tris"])
+    if params["style"] == "chibi":
+        tris = min(tris, 3500)
+    detail = detail_for_target(tris)
+    return {
+        "brief": (text or "concept image").strip()[:200],
+        "style": params["style"], "species": (params.get("tags") or ["character"])[0],
+        "height_m": round(float(params["height"]), 3),
+        "heads_tall": round(heads, 2), "build": round(float(params["build"]), 2),
+        "head_boost": round(float(params.get("head_boost", 1.0)), 2),
+        "target_tris": tris, "texture_size": 1024, "detail": detail,
+        "palette": {s: swatch(params[s]) for s in PLAN_SLOTS},
+        "features": sorted(params["accessories"] & set(FEATURES)),
+        "materials": {}, "extra_parts": [],
+        "back_view": "symmetric mirror of the front (backpacks, capes and straps modelled explicitly)",
+        "modelling_plan": [
+            f"body split into {heads:g}-heads-tall proportions from parametric volumes",
+            "head/hair/eyes, torso, A-pose arms, legs and boots built as separate volumes",
+            "each volume box-projected into a 4x4 atlas, then quadric-decimated to budget",
+        ],
+        "notes": ["planned by the built-in rule engine (no language model)"],
+        "generator": "heuristic", "confidence": 0.6,
+    }
+
+
+def local_revise(plan, feedback):
+    """Apply a plain-language change request to an existing plan without an LLM."""
+    p = json.loads(json.dumps(plan))
+    txt = (feedback or "").lower()
+    diff = _param_diff(txt)
+    sticky = []
+    for k in ("skin", "hair", "garment_a", "garment_b", "pants", "boots",
+              "leather", "metal", "accent"):
+        if k in diff:
+            p.setdefault("palette", {})[k] = swatch(diff[k])
+            sticky.append(k)
+    for f in diff.get("accessories", set()):
+        if f in FEATURES and f not in p.setdefault("features", []):
+            p["features"].append(f)
+    for f in FEATURES:                                   # "remove the cape"
+        if f.replace("_", " ") in txt and re_remove(txt, f) and f in p.get("features", []):
+            p["features"].remove(f)
+    if any(w in txt for w in ("taller", "bigger", "larger")):
+        p["height_m"] = round(min(2.6, float(p.get("height_m", 1.7)) * 1.08), 3)
+    if any(w in txt for w in ("shorter", "smaller", "tiny")):
+        p["height_m"] = round(max(0.6, float(p.get("height_m", 1.7)) * 0.92), 3)
+    if any(w in txt for w in ("heavier", "bulkier", "broader", "muscular")):
+        p["build"] = round(min(1.4, float(p.get("build", 1.0)) * 1.15), 2)
+    if any(w in txt for w in ("slimmer", "thinner", "leaner")):
+        p["build"] = round(max(0.7, float(p.get("build", 1.0)) * 0.88), 2)
+    if any(w in txt for w in ("chibi", "cuter", "bigger head", "cartoon")):
+        p["style"], p["heads_tall"] = "chibi", 3.1
+    if "realistic" in txt:
+        p["style"], p["heads_tall"] = "realistic", 6.4
+    m = re.search(r"(\d{3,6})\s*(?:tris|triangles|polys|polygons)", txt)
+    if m:
+        p["target_tris"] = max(600, min(40000, int(m.group(1))))
+    elif any(w in txt for w in ("low poly", "low-poly", "mobile", "lighter", "fewer triangles")):
+        p["target_tris"] = 1500
+        p["detail"] = {"sphere_sub": 2, "cyl_sec": 8, "cap_cnt": 6}
+    elif any(w in txt for w in ("high detail", "more detail", "high poly", "denser", "more triangles")):
+        p["target_tris"] = 18000
+        p["detail"] = {"sphere_sub": 4, "cyl_sec": 24, "cap_cnt": 20}
+    p["detail"] = detail_for_target(p.get("target_tris"))
+    p["notes"] = (["applied locally: " + (feedback or "")[:120]] +
+                  [n for n in p.get("notes", []) if not str(n).startswith("applied locally:")])
+    p["_sticky_colors"] = sticky
+    return p
+
+
+def re_remove(txt, feature):
+    """True when the feedback asks to delete a feature ('remove the cape')."""
+    f = feature.replace("_", " ")
+    return any(w in txt for w in (f"remove the {f}", f"remove {f}", f"without the {f}",
+                                  f"without {f}", f"no {f}", f"drop the {f}", f"drop {f}",
+                                  f"lose the {f}", f"lose {f}"))
+
+
+def _param_diff(txt):
+    """Which params does this text actually change vs the defaults?"""
+    got = analyze_text(txt)
+    base = default_params()
+    out = {}
+    for k, v in got.items():
+        if k in ("tags", "source_notes", "materials", "heads", "detail", "plan"):
+            continue
+        if isinstance(v, set):
+            if v:
+                out[k] = v
+        elif v != base.get(k):
+            out[k] = v
+    return out
+
+
+# ---------------------------------------------------------------------------
+# full pipeline
+# ---------------------------------------------------------------------------
+
+def run_pipeline(source="text", text=None, image_bytes=None, budget="game",
+                 tex_size=None, model_dir=".", prompt="", use_ai=True,
+                 plan=None, prev_plan=None, feedback=None):
+    """analyse -> plan -> geometry -> UV -> textures -> optimise -> export."""
     t0 = time.time()
     stages = []
 
     def done(name):
         stages.append({"name": name, "ms": int((time.time() - t0) * 1000)})
 
-    if source == "image":
-        params = analyze_image(image_bytes)
+    params = analyze_image(image_bytes) if source == "image" else analyze_text(text or prompt or "")
+    if prev_plan:                       # a revision refines the character that already exists
+        params = plan_to_params(params, prev_plan)
+    budget_hint = None if budget in (None, "auto") else BUDGETS[budget]["tris"]
+    ai_info = {"enabled": False, "used": False, "model": None, "brief": None,
+               "error": None, "plan_source": "heuristic"}
+
+    if plan is None:
+        try:
+            import director
+            ai_info["enabled"] = director.available()
+            if use_ai and director.available():
+                plan, model = director.plan_for(
+                    text=text, image_bytes=image_bytes, budget_hint=budget_hint,
+                    prev_plan=prev_plan, feedback=feedback,
+                    base=params, source=source)
+                ai_info["used"] = True
+                ai_info["model"] = model
+                ai_info["brief"] = plan.get("brief")
+                ai_info["plan_source"] = "AI revision" if prev_plan else "AI director"
+        except Exception as e:                        # noqa: BLE001
+            ai_info["error"] = str(e)[:300]
+            plan = None
+        if plan is None:                              # fall back to the rule planner
+            plan = local_revise(prev_plan, feedback) if (prev_plan and feedback) else \
+                   local_plan(params, text or prompt or "", budget_hint)
+            ai_info["plan_source"] = "rule-based revision" if prev_plan else "rule-based planner"
     else:
-        params = analyze_text(text)
+        ai_info["plan_source"] = "provided plan"
 
-    ai_info = {"enabled": False, "used": False, "model": None, "brief": None, "error": None}
-    try:
-        import ai
-        ai_info["enabled"] = ai.available()
-        if use_ai and ai.available():
-            if source == "image":
-                llm, model = ai.analyze_image(image_bytes, hint=text or "")
-            else:
-                llm, model = ai.analyze_text(text)
-            params = ai.merge(params, llm, source)
-            ai_info.update(used=True, model=model, brief=llm.get("brief"))
-    except Exception as e:  # noqa: BLE001
-        ai_info["error"] = str(e)[:300]
-        params.setdefault("source_notes", []).insert(
-            0, "AI analysis unavailable - heuristic analyzer used")
-    done("Analyze input" + (" (AI)" if ai_info["used"] else ""))
+    # measured pixel colours (image input) beat the plan unless the user asked
+    # for a specific change in this turn
+    sticky = set(plan.get("_sticky_colors") or [])
+    if prev_plan and prev_plan.get("palette"):
+        for slot, hexv in (plan.get("palette") or {}).items():
+            if prev_plan["palette"].get(slot) != hexv:
+                sticky.add(slot)
+    p = plan_to_params(params, plan)
+    if source == "image":
+        # a colour the user asked for out loud beats the pixel sample
+        if text:
+            intent = _param_diff(text.lower())
+            sticky |= {k for k in intent if k in PLAN_SLOTS}
+        for slot in (params.get("_sampled") or set()):   # names of pixel-sampled slots
+            if slot in PLAN_SLOTS and slot not in sticky:
+                p[slot] = tuple(params[slot])
+    done("Understand input (" + ai_info["plan_source"] + ")")
 
-    b = BUDGETS[budget]
-    parts, geo_notes = build_character(params, b)
+    # geometry budget: the plan decides unless the user capped it
+    b = dict(BUDGETS["game" if budget in (None, "auto") else budget])
+    det = plan.get("detail") or {}
+    for key, lo, hi in (("sphere_sub", 1, 4), ("cyl_sec", 6, 32), ("cap_cnt", 4, 32)):
+        if isinstance(det.get(key), (int, float)):
+            b[key] = int(max(lo, min(hi, det[key])))
+    b["cap_cnt"] = tuple(b["cap_cnt"]) if isinstance(b["cap_cnt"], (list, tuple)) else (b["cap_cnt"], b["cap_cnt"])
+    if len(b["cap_cnt"]) == 1:
+        b["cap_cnt"] = (b["cap_cnt"][0], b["cap_cnt"][0])
+    target = int(plan.get("target_tris") or b["tris"])
+    if budget_hint:
+        target = min(target, budget_hint)
+    target = max(400, min(40000, target))
+
+    parts, geo_notes = build_character(p, b)
+    extra, extra_notes = build_extra_parts(plan, p, b)
+    parts += extra
     tris_before = sum(len(pt.mesh.faces) for pt in parts)
-    done("Reconstruct geometry")
+    done(f"Reconstruct geometry ({len(parts)} volumes)")
 
-    parts, _, decimated = optimize_parts(parts, b["tris"])
+    parts, _, decimated = optimize_parts(parts, target)
     mesh, uv = assemble(parts)
-    done("Optimize topology")
+    done(f"Optimise topology -> {len(mesh.faces):,} tris")
 
-    color_img = finalize(mesh, uv, params, model_dir, tex_size=tex_size)
+    tex = int(tex_size or plan.get("texture_size") or 1024)
+    tex = 1024 if tex not in (512, 1024, 2048) else tex
+    color_img = finalize(mesh, uv, p, model_dir, tex_size=tex)
     done("Unwrap UVs + bake textures")
     done("Export GLB / OBJ / STL")
 
+    if not str(plan.get("brief") or "").strip():        # never ship an empty brief
+        plan["brief"] = (f"{params['style']} character"
+                         + (": " + ", ".join(t for t in params.get("tags", [])[:4])
+                            if params.get("tags") else ""))
+    public_plan = {k: v for k, v in plan.items() if not k.startswith("_")}
     report = {
         "stages": stages,
         "source": source,
         "prompt": prompt,
-        "style": params["style"],
-        "tags": params.get("tags", []),
-        "notes": geo_notes + params.get("source_notes", []),
-        "palette": {k: swatch(params[k]) for k in
-                    ("skin", "hair", "garment_a", "garment_b", "pants",
-                     "boots", "leather", "metal", "accent")},
-        "accessories": sorted(params["accessories"]),
+        "style": p["style"],
+        "tags": p.get("tags", []),
+        "notes": geo_notes + extra_notes + params.get("source_notes", []),
+        "palette": {k: swatch(p[k]) for k in PLAN_SLOTS},
+        "accessories": sorted(p["accessories"]),
         "geometry": {
             "vertices": int(len(mesh.vertices)),
             "triangles": int(len(mesh.faces)),
             "triangles_before_optimize": int(tris_before),
+            "target_tris": int(target),
             "decimated": bool(decimated),
             "materials": 1,
-            "texture_size": tex_size,
+            "texture_size": tex,
             "maps": ["baseColor", "metallicRoughness", "normal"],
+            "volumes": len(parts),
         },
-        "height_m": round(float(params["height"]), 2),
+        "height_m": round(float(p["height"]), 2),
+        "heads_tall": round(float(p.get("heads") or STYLE_PROPS[p["style"]]["heads"]), 2),
+        "plan": public_plan,
         "ai": ai_info,
     }
     return report
