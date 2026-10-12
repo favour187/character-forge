@@ -17,4 +17,9 @@ jobs:
           python-version: "3.12"
       - name: Compile Python modules
         run: |
-          python -m py_compile engine.py sculpt.py server.py ai.py db.py director.py sitecustomize.py
+          # Compile every top-level module that exists. sitecustomize.py was
+          # listed here but never present in the repo, which failed the job
+          # with "[Errno 2] No such file or directory".
+          files=$(ls *.py 2>/dev/null)
+          echo "Compiling: $files"
+          python -m py_compile $files
